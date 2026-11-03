@@ -2,7 +2,6 @@ mod render;
 
 pub use render::{preview, project_article};
 
-use super::credentials::ConsumerApi;
 use super::{ApiError, Client, send};
 use markdown::knowledge::{ReadingStats, TocEntry};
 use reqwest::StatusCode;
@@ -187,7 +186,7 @@ pub async fn summaries(filters: &ListFilters) -> Result<ArticlePage, ApiError> {
             "article filters accept at most five non-empty tags".to_owned(),
         ));
     }
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     read_summary_page(&client, filters).await
 }
 
@@ -208,12 +207,12 @@ struct TagResponse {
 }
 
 pub async fn tags() -> Result<Vec<TagCount>, ApiError> {
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .get(format!("{ENDPOINT}/tags"))
-            .bearer_auth(&client.api_key),
+            .bearer_auth(&client.token),
         "list knowledge tags",
     )
     .await?;
@@ -222,7 +221,7 @@ pub async fn tags() -> Result<Vec<TagCount>, ApiError> {
 }
 
 pub async fn list(cursor: Option<String>) -> Result<Page, ApiError> {
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let page = read_summary_page(
         &client,
         &ListFilters {
@@ -244,7 +243,7 @@ pub async fn list(cursor: Option<String>) -> Result<Page, ApiError> {
 }
 
 pub async fn overview() -> Result<Page, ApiError> {
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let client_ref = &client;
     let documents = overview_pages(|cursor| async move {
         read_summary_page(
@@ -297,7 +296,7 @@ async fn read_summary_page(
     let mut request = client
         .http
         .get(format!("{ENDPOINT}/articles"))
-        .bearer_auth(&client.api_key);
+        .bearer_auth(&client.token);
     if let Some(search) = &filters.search {
         request = request.query(&[("search", search)]);
     }
@@ -384,9 +383,9 @@ fn build_url(id: &str) -> Result<String, ApiError> {
 pub async fn get(reference: &str) -> Result<Article, ApiError> {
     let id = article_identity(reference).unwrap_or_else(|| reference.to_owned());
     let url = build_url(&id)?;
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = send(
-        client.http.get(url).bearer_auth(&client.api_key),
+        client.http.get(url).bearer_auth(&client.token),
         "read knowledge article",
     )
     .await?;
@@ -395,11 +394,11 @@ pub async fn get(reference: &str) -> Result<Article, ApiError> {
 }
 
 pub async fn create(input: &Create) -> Result<Article, ApiError> {
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = client
         .http
         .post(format!("{ENDPOINT}/articles"))
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .json(input)
         .send()
         .await?;
@@ -413,11 +412,11 @@ pub async fn create(input: &Create) -> Result<Article, ApiError> {
 
 pub async fn update_draft(id: &str, input: &DraftUpdate) -> Result<Article, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = client
         .http
         .patch(url)
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .json(input)
         .send()
         .await?;
@@ -431,11 +430,11 @@ pub async fn update_draft(id: &str, input: &DraftUpdate) -> Result<Article, ApiE
 
 pub async fn update_documents(id: &str, input: &DocumentUpdate) -> Result<Article, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = client
         .http
         .patch(url)
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .json(input)
         .send()
         .await?;
@@ -449,12 +448,12 @@ pub async fn update_documents(id: &str, input: &DocumentUpdate) -> Result<Articl
 
 pub async fn set_visibility(id: &str, input: &VisibilityUpdate) -> Result<Summary, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .patch(url)
-            .bearer_auth(&client.api_key)
+            .bearer_auth(&client.token)
             .json(input),
         "set knowledge visibility",
     )
@@ -469,11 +468,11 @@ pub async fn delete(
     expected_updated_at: &str,
 ) -> Result<(), ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let response = client
         .http
         .delete(url)
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .json(&serde_json::json!({
             "expectedHash": expected_hash,
             "expectedUpdatedAt": expected_updated_at,

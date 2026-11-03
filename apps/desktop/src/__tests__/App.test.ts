@@ -52,11 +52,7 @@ function deferred<T>() {
 const configuration: ConfigurationStatus = {
 	ugos: { status: "missing" },
 	r2: { status: "missing" },
-	api: {
-		memos: { status: "ready", data: "test-memos" },
-		moment: { status: "ready", data: "test-moment" },
-		knowledge: { status: "ready", data: "test-knowledge" },
-	},
+	account: { status: "ready", data: { email: "owner@example.com", name: "Owner", picture: null } },
 	ntfy: { status: "ready", data: { token: "test-ntfy", development: false } },
 	ntfyDev: false,
 	notionCalendar: { status: "missing" },
@@ -278,12 +274,11 @@ it.each([false, true])(
 					status: "ready",
 					data: { channel: "moment", photos: [], total: 0 },
 				});
+			if (command === "sign_out") return Promise.resolve({ status: "ready", data: "account" });
 			if (command === "read_moment_tags") {
 				tagReads += 1;
 				return Promise.resolve({ status: "ready", data: [] });
 			}
-			if (command === "save_api_configuration")
-				return Promise.resolve({ status: "ready", data: "Saved" });
 			return normal(command);
 		});
 		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-photo");
@@ -320,15 +315,9 @@ it.each([false, true])(
 		button(target, changeCredentials ? "Settings" : "Dashboard", "nav button").click();
 		await tick();
 		if (changeCredentials) {
-			const key = target.querySelector<HTMLInputElement>("#moment-api-key");
-			if (!key) throw new Error("Moment credential input missing");
-			key.value = "replacement-key";
-			key.dispatchEvent(new Event("input", { bubbles: true }));
-			await tick();
-			const row = key.closest(".settings-row");
-			if (!(row instanceof HTMLElement)) throw new Error("Credential row missing");
+			await vi.waitFor(() => expect(button(target, "Sign out")).toBeTruthy());
 			const previousReads = tagReads;
-			button(row, "Save").click();
+			button(target, "Sign out").click();
 			await vi.waitFor(() => expect(tagReads).toBeGreaterThan(previousReads));
 		}
 		bytes.resolve(new ArrayBuffer(4));
@@ -478,17 +467,13 @@ it("shows only configured destinations after configuration loads", async () => {
 		status: "ready",
 		data: {
 			...configuration,
-			api: {
-				memos: { status: "missing" },
-				moment: { status: "missing" },
-				knowledge: { status: "ready", data: "test-knowledge" },
-			},
+			account: { status: "missing" },
 			ntfy: { status: "missing" },
 			qqMusic: { status: "ready", data: "Connected" },
 		},
 	});
 	await vi.waitFor(() =>
-		expect(labels()).toEqual(["Dashboard", "Chat", "Newspaper", "Music", "Knowledge", "Settings"]),
+		expect(labels()).toEqual(["Dashboard", "Chat", "Newspaper", "Music", "Settings"]),
 	);
 	expect(target.querySelector('[aria-label="Open inbox"]')).toBeNull();
 	expect(target.querySelector("aside")?.textContent).not.toContain("Connections");

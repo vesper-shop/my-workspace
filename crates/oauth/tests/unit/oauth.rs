@@ -71,6 +71,7 @@ async fn pkce_exchange() {
         &endpoint,
         "http://127.0.0.1:0/callback",
         "read write",
+        &["https://api.example.com"],
     )
     .await
     .unwrap();
@@ -78,6 +79,7 @@ async fn pkce_exchange() {
     let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
     assert_eq!(query["client_id"], "client");
     assert_eq!(query["redirect_uri"], "http://127.0.0.1:0/callback");
+    assert_eq!(query["resource"], "https://api.example.com");
     assert_eq!(query["scope"], "read write");
     assert_eq!(query["code_challenge_method"], "S256");
     assert!(!query.contains_key("code_verifier"));
@@ -88,7 +90,11 @@ async fn pkce_exchange() {
         query["state"]
     );
     let task = tokio::spawn(authenticate(authorization));
-    let browser = reqwest::Client::builder().no_proxy().build().unwrap();
+    let browser = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
     let unrelated = reqwest::Url::parse(&callback)
         .unwrap()
         .join("/favicon.ico")
@@ -98,7 +104,8 @@ async fn pkce_exchange() {
         reqwest::StatusCode::BAD_REQUEST
     );
     let response = browser.get(callback).send().await.unwrap();
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+    assert_eq!(response.headers()["location"], "vesper://");
     let token = task.await.unwrap().unwrap();
     assert_eq!(token.access_token, "access");
     assert_eq!(token.refresh_token.as_deref(), Some("refresh"));
@@ -111,6 +118,7 @@ async fn pkce_exchange() {
     assert_eq!(fields["code_verifier"], verifier);
     assert_eq!(fields["client_id"], "client");
     assert_eq!(fields["redirect_uri"], "http://127.0.0.1:0/callback");
+    assert_eq!(fields["resource"], "https://api.example.com");
 }
 
 #[tokio::test]
@@ -121,6 +129,7 @@ async fn cancellation_releases_callback_port() {
         "https://example.com/token",
         "http://127.0.0.1:0/callback",
         "read",
+        &[],
     )
     .await
     .unwrap();
@@ -141,7 +150,7 @@ async fn refresh_rotation() {
             r#"{"access_token":"new","token_type":"Bearer","expires_in":7200}"#
         };
         let (endpoint, request) = token_server("200 OK", body).await;
-        let token = refresh("client", &endpoint, "old").await.unwrap();
+        let token = refresh("client", &endpoint, "old", &[]).await.unwrap();
         assert_eq!(token.access_token, "new");
         assert_eq!(token.expires_in, 7200);
         assert_eq!(token.refresh_token.as_deref(), rotated.then_some("rotated"));
@@ -168,7 +177,7 @@ async fn redacts_failed_token_responses() {
         ),
     ] {
         let (endpoint, request) = token_server(status, body).await;
-        let error = match refresh("client", &endpoint, "old").await {
+        let error = match refresh("client", &endpoint, "old", &[]).await {
             Ok(_) => panic!("invalid token response accepted"),
             Err(error) => error,
         };

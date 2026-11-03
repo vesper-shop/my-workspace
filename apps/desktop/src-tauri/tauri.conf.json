@@ -51,6 +51,11 @@
       "endpoints": [
         "https://github.com/Pleasurecruise/my-workspace/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["vesper"]
+      }
     }
   }
 }

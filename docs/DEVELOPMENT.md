@@ -77,7 +77,7 @@ to Keychain. Storage, locking, and backup rules belong to [Persistence](PERSISTE
 
 | Configuration                                                | Debug source                                                |
 | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| UGOS, R2, consumer API keys, ntfy                            | Process environment / root `.env`                           |
+| UGOS, R2, ntfy                                               | Process environment / root `.env`                           |
 | App Lock, Telegram configuration                             | Environment, then database                                  |
 | X, music, miHoYo, Skland, Notion view link, certificate pins | Database                                                    |
 | Steam                                                        | Complete `STEAM_API_KEY` and `STEAM_ID` pair, then database |

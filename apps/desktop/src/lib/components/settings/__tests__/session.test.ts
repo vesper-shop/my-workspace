@@ -12,11 +12,7 @@ it.each<"ready" | "failed">(["ready", "failed"])(
 		const current: ConfigurationStatus = {
 			ugos: { status: "missing" },
 			r2: { status: "missing" },
-			api: {
-				memos: { status: "missing" },
-				moment: { status: "missing" },
-				knowledge: { status: "missing" },
-			},
+			account: { status: "missing" },
 			ntfy: { status: "missing" },
 			ntfyDev: false,
 			notionCalendar: { status: "missing" },

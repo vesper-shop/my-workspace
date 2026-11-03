@@ -1,30 +1,24 @@
-pub mod credentials;
+pub mod identity;
 pub mod knowledge;
 pub mod memos;
 pub mod moment;
 
-use credentials::ConsumerApi;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::time::Duration;
-use vault::Stored;
 
 pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// An authenticated HTTP client for one consumer service.
 struct Client {
-    api_key: String,
+    token: String,
     http: reqwest::Client,
 }
 
 impl Client {
-    fn load(service: ConsumerApi) -> Result<Self, ApiError> {
-        let api_key = match credentials::read(service)? {
-            Stored::Ready(api_key) => api_key,
-            Stored::Missing => return Err(ApiError::MissingCredentials(service.service())),
-        };
+    async fn load() -> Result<Self, ApiError> {
         Ok(Self {
-            api_key,
+            token: identity::access_token().await?,
             http: reqwest::Client::builder()
                 .timeout(REQUEST_TIMEOUT)
                 .user_agent(concat!("Vesper/", env!("CARGO_PKG_VERSION"), " consumers"))
@@ -41,6 +35,9 @@ async fn send(
 ) -> Result<reqwest::Response, ApiError> {
     let response = request.send().await?;
     let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        identity::invalidate().await;
+    }
     if !status.is_success() {
         return Err(ApiError::Status { operation, status });
     }
@@ -50,7 +47,8 @@ async fn send(
 #[derive(Debug)]
 pub enum ApiError {
     Credentials(vault::Error),
-    MissingCredentials(&'static str),
+    SignedOut,
+    Identity(oauth::Error),
     Media(moment::MediaError),
     Store(cms::r2::StoreError),
     Request(reqwest::Error),
@@ -69,9 +67,8 @@ impl Display for ApiError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Credentials(source) => Display::fmt(source, formatter),
-            Self::MissingCredentials(service) => {
-                write!(formatter, "{service} API key is not configured")
-            }
+            Self::SignedOut => write!(formatter, "sign in with your you-find.me account"),
+            Self::Identity(source) => write!(formatter, "you-find.me sign-in failed: {source}"),
             Self::Media(source) => Display::fmt(source, formatter),
             Self::Store(source) => Display::fmt(source, formatter),
             Self::Request(source) => write!(formatter, "consumer API request failed: {source}"),
@@ -95,10 +92,10 @@ impl Error for ApiError {
             Self::Store(source) => Some(source),
             Self::Request(source) => Some(source),
             Self::Media(source) => Some(source),
-            Self::MissingCredentials(..)
-            | Self::Status { .. }
-            | Self::Rejected { .. }
-            | Self::Protocol(..) => None,
+            Self::Identity(source) => Some(source),
+            Self::SignedOut | Self::Status { .. } | Self::Rejected { .. } | Self::Protocol(..) => {
+                None
+            }
         }
     }
 }

@@ -32,6 +32,7 @@ pub async fn web_authorization(client_id: Option<&str>) -> Result<Authorization>
         TOKEN_ENDPOINT,
         "http://127.0.0.1:8989/login",
         WEB_SCOPES,
+        &[],
     )
     .await
     .map_err(|error| Error::Authentication(format!("Spotify: {error}")))
@@ -44,6 +45,7 @@ pub async fn playback_authorization() -> Result<Authorization> {
         TOKEN_ENDPOINT,
         "http://127.0.0.1:8898/login",
         PLAYBACK_SCOPES,
+        &[],
     )
     .await
     .map_err(|error| Error::Authentication(format!("Spotify: {error}")))
@@ -63,7 +65,7 @@ pub async fn authenticate(authorization: Authorization) -> Result<GrantToken> {
 }
 
 pub(crate) async fn refresh(client_id: &str, refresh_token: &str) -> Result<AccessToken> {
-    let token = oauth::refresh(client_id, TOKEN_ENDPOINT, refresh_token)
+    let token = oauth::refresh(client_id, TOKEN_ENDPOINT, refresh_token, &[])
         .await
         .map_err(|error| Error::Authentication(format!("Spotify: {error}")))?;
     Ok(AccessToken {

@@ -106,9 +106,9 @@
 	function viewAvailable(view: View): boolean {
 		const configuration = settings.configuration;
 		switch (view) {
-			case "memos": return configuration?.api.memos.status === "ready";
-			case "moment": return configuration?.api.moment.status === "ready";
-			case "knowledge": return configuration?.api.knowledge.status === "ready";
+			case "memos":
+			case "moment":
+			case "knowledge": return configuration?.account.status === "ready";
 			case "music": return configuration?.spotify.status === "ready" || configuration?.qqMusic.status === "ready";
 			case "inbox": return configuration?.ntfy.status === "ready";
 			case "memory": return configuration?.nowledge.status === "ready";
@@ -372,7 +372,7 @@
 						error={settings.error}
 						onsaveugos={settings.saveUgosConfiguration}
 						onsaver2={settings.saveR2Configuration}
-						onsaveapi={settings.saveApiConfiguration}
+						onswitchaccount={settings.switchAccount}
 						onsaventfy={settings.saveNtfy}
 						onsavenowledge={settings.saveNowledge}
 						onsavenotion={settings.saveNotionCalendar}

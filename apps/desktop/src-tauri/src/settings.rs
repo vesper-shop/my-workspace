@@ -1,6 +1,5 @@
 use crate::content::Content;
 use crate::{CommandError, CommandResponse};
-use consumers::api::credentials::ConsumerApi;
 use tauri::Manager;
 use vault::Stored;
 
@@ -9,7 +8,7 @@ use vault::Stored;
 pub(crate) struct Configuration {
     ugos: Saved<ugos::credentials::Credentials>,
     r2: Saved<R2Configuration>,
-    api: ApiConfiguration,
+    account: Saved<consumers::api::identity::Account>,
     ntfy: Saved<inbox::credentials::Credentials>,
     ntfy_dev: bool,
     codex_resets: ::todo::Subscription,
@@ -46,13 +45,6 @@ struct R2Configuration {
     secret_access_key: String,
 }
 
-#[derive(serde::Serialize)]
-struct ApiConfiguration {
-    memos: Saved<String>,
-    moment: Saved<String>,
-    knowledge: Saved<String>,
-}
-
 #[tauri::command]
 pub(crate) async fn read_configuration(app: tauri::AppHandle) -> CommandResponse<Configuration> {
     let result = async {
@@ -63,11 +55,7 @@ pub(crate) async fn read_configuration(app: tauri::AppHandle) -> CommandResponse
             }),
             Stored::Missing => Saved::Missing,
         };
-        let api = ApiConfiguration {
-            memos: consumers::api::credentials::read(ConsumerApi::Memos)?.into(),
-            moment: consumers::api::credentials::read(ConsumerApi::Moment)?.into(),
-            knowledge: consumers::api::credentials::read(ConsumerApi::Knowledge)?.into(),
-        };
+        let account = consumers::api::identity::account()?.into();
         let ntfy: Saved<_> = inbox::credentials::read()?.into();
         let ntfy_dev = matches!(&ntfy, Saved::Ready(credentials) if credentials.development);
         let (app_lock, app_lock_dev) = match crate::app_lock::read()? {
@@ -87,7 +75,7 @@ pub(crate) async fn read_configuration(app: tauri::AppHandle) -> CommandResponse
         Ok::<_, CommandError>(Configuration {
             ugos: ugos::credentials::read()?.into(),
             r2,
-            api,
+            account,
             ntfy,
             ntfy_dev,
             codex_resets: app.state::<::todo::Store>().read_codex().await?,
@@ -142,20 +130,6 @@ pub(crate) async fn save_r2_configuration(
         ::cms::r2::configure(access_key_id, secret_access_key)?;
         app.state::<Content>().reset().await;
         Ok::<_, CommandError>("r2".to_owned())
-    };
-    result.await.into()
-}
-
-#[tauri::command]
-pub(crate) async fn save_api_configuration(
-    service: ConsumerApi,
-    api_key: String,
-    app: tauri::AppHandle,
-) -> CommandResponse<String> {
-    let result = async {
-        consumers::api::credentials::save(service, &api_key)?;
-        app.state::<Content>().reset_views().await;
-        Ok::<_, CommandError>(service.name().to_owned())
     };
     result.await.into()
 }

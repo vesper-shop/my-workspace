@@ -185,9 +185,10 @@ restoring invalidated content. Writes retain each consumer's server-side coordin
 ### Consumer open API
 
 The three consumer sites share one API shape. The browser and external clients call the same
-`/api/*` routes; there is no separate versioned surface. A request that sends
-`Authorization: Bearer <key>` is checked only against the site's API key (`MEMOS_API_KEY`,
-`MOMENT_API_KEY`, `KNOWLEDGE_API_KEY`); otherwise the owner session applies.
+`/api/*` routes; there is no separate versioned surface. Vesper signs in once through the
+you-find.me OAuth gateway (client `workspace`, PKCE on `127.0.0.1:8793`) and sends one access token
+whose audience covers all three sites; each site verifies it against the gateway's JWKS, its own
+audience and write scope, and `ALLOWED_EMAIL`. Without a bearer token the owner session applies.
 
 | Site                    | REST resources                                                     | Anonymous reads                                                                     |
 | ----------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |

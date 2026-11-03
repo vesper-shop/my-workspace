@@ -11,6 +11,7 @@ use tokio::net::TcpListener;
 type Client = BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 const MAX_CALLBACK_LINE_BYTES: usize = 8 * 1024;
 const CALLBACK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const RETURN_URL: &str = "vesper://";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -34,6 +35,7 @@ pub struct Authorization {
     state: CsrfToken,
     listener: TcpListener,
     path: String,
+    resources: Vec<String>,
 }
 
 pub struct Token {
@@ -48,6 +50,7 @@ pub async fn authorize(
     token_url: &str,
     redirect_uri: &str,
     scopes: &str,
+    resources: &[&str],
 ) -> Result<Authorization, Error> {
     let redirect = RedirectUrl::new(redirect_uri.to_owned()).map_err(|_| Error::Configuration)?;
     if redirect.url().scheme() != "http" || redirect.url().host_str() != Some("127.0.0.1") {
@@ -62,14 +65,19 @@ pub async fn authorize(
         .set_auth_uri(AuthUrl::new(authorize_url.to_owned()).map_err(|_| Error::Configuration)?)
         .set_redirect_uri(redirect);
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-    let (url, state) = client
-        .authorize_url(CsrfToken::new_random)
-        .add_scopes(
-            scopes
-                .split_whitespace()
-                .map(|scope| Scope::new(scope.to_owned())),
+    let (url, state) = resources
+        .iter()
+        .fold(
+            client
+                .authorize_url(CsrfToken::new_random)
+                .add_scopes(
+                    scopes
+                        .split_whitespace()
+                        .map(|scope| Scope::new(scope.to_owned())),
+                )
+                .set_pkce_challenge(challenge),
+            |request, resource| request.add_extra_param("resource", *resource),
         )
-        .set_pkce_challenge(challenge)
         .url();
     Ok(Authorization {
         url: url.into(),
@@ -78,6 +86,10 @@ pub async fn authorize(
         state,
         listener,
         path,
+        resources: resources
+            .iter()
+            .map(|resource| (*resource).to_owned())
+            .collect(),
     })
 }
 
@@ -97,9 +109,15 @@ pub async fn authenticate(authorization: Authorization) -> Result<Token, Error> 
         .await
         .map_err(|_| Error::Callback("authorization timed out"))?;
     let token = authorization
-        .client
-        .exchange_code(AuthorizationCode::new(code?))
-        .set_pkce_verifier(authorization.verifier)
+        .resources
+        .iter()
+        .fold(
+            authorization
+                .client
+                .exchange_code(AuthorizationCode::new(code?))
+                .set_pkce_verifier(authorization.verifier),
+            |request, resource| request.add_extra_param("resource", resource.clone()),
+        )
         .request_async(&send)
         .await
         .map_err(token_error)?;
@@ -110,9 +128,16 @@ pub async fn refresh(
     client_id: &str,
     token_url: &str,
     refresh_token: &str,
+    resources: &[&str],
 ) -> Result<Token, Error> {
-    let token = client(client_id, token_url)?
-        .exchange_refresh_token(&RefreshToken::new(refresh_token.to_owned()))
+    let client = client(client_id, token_url)?;
+    let refresh_token = RefreshToken::new(refresh_token.to_owned());
+    let token = resources
+        .iter()
+        .fold(
+            client.exchange_refresh_token(&refresh_token),
+            |request, resource| request.add_extra_param("resource", *resource),
+        )
         .request_async(&send)
         .await
         .map_err(token_error)?;
@@ -204,23 +229,17 @@ async fn wait_for_code(authorization: &Authorization) -> Result<String, Error> {
         let result = url.and_then(|url| {
             parse_callback(&url, &authorization.path, authorization.state.secret())
         });
-        let (status, message) = if result.is_ok() {
-            (
-                "200 OK",
-                "Authorization received. Return to Vesper to finish connecting.",
+        let response = if result.is_ok() {
+            format!(
+                "HTTP/1.1 302 Found\r\nLocation: {RETURN_URL}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             )
         } else {
-            (
-                "400 Bad Request",
-                "Authorization could not be completed. Return to Vesper and try again.",
+            let body = "<!doctype html><meta charset=\"utf-8\"><title>Vesper</title><p>Authorization could not be completed. Return to Vesper and try again.</p>";
+            format!(
+                "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
             )
         };
-        let body =
-            format!("<!doctype html><meta charset=\"utf-8\"><title>Vesper</title><p>{message}</p>");
-        let response = format!(
-            "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
         let _ = tokio::time::timeout(
             Duration::from_secs(10),
             stream.write_all(response.as_bytes()),

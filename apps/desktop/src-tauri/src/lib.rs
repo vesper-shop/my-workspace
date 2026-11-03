@@ -8,6 +8,7 @@ mod chat;
 mod content;
 mod dashboard;
 mod games;
+mod identity;
 mod inbox;
 mod island;
 mod ledger;
@@ -84,6 +85,7 @@ pub fn run() {
         .manage(dashboard::Runtime::default())
         .manage(updater::UpdateState::default())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .menu(updater::menu)
@@ -224,7 +226,8 @@ pub fn run() {
             settings::save_ugos_configuration,
             settings::save_nowledge_configuration,
             settings::save_r2_configuration,
-            settings::save_api_configuration,
+            identity::sign_in,
+            identity::sign_out,
             settings::save_ntfy_configuration,
             settings::save_notion_calendar,
             settings::save_codex_resets,

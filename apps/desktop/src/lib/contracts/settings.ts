@@ -8,9 +8,10 @@ export interface R2Configuration {
 	secretAccessKey: string;
 }
 
-export interface ApiConfiguration {
-	service: "memos" | "moment" | "knowledge";
-	apiKey: string;
+export interface Account {
+	email: string;
+	name: string;
+	picture: string | null;
 }
 
 export interface CodexResets {
@@ -48,11 +49,7 @@ export type StoredConfiguration<T> = { status: "missing" } | { status: "ready"; 
 export interface ConfigurationStatus {
 	ugos: StoredConfiguration<UgosConfiguration>;
 	r2: StoredConfiguration<R2Configuration>;
-	api: {
-		memos: StoredConfiguration<string>;
-		moment: StoredConfiguration<string>;
-		knowledge: StoredConfiguration<string>;
-	};
+	account: StoredConfiguration<Account>;
 	ntfy: StoredConfiguration<NtfyConfig>;
 	ntfyDev: boolean;
 	notionCalendar: StoredConfiguration<NotionCalendar>;

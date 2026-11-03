@@ -26,6 +26,7 @@ pub async fn authorization() -> Result<Authorization, PublishError> {
         TOKEN_ENDPOINT,
         REDIRECT_URI,
         SCOPES,
+        &[],
     )
     .await
     .map_err(oauth_error)?;
@@ -60,6 +61,7 @@ pub async fn refresh(
         &credentials.client_id,
         TOKEN_ENDPOINT,
         &credentials.refresh_token,
+        &[],
     )
     .await
     .map_err(oauth_error)?;

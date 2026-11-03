@@ -1,4 +1,3 @@
-use super::credentials::ConsumerApi;
 use super::{ApiError, Client, send};
 use cms::r2::Store;
 use reqwest::StatusCode;
@@ -252,11 +251,11 @@ pub async fn query(input: &PhotoQuery) -> Result<Vec<Photo>, ApiError> {
             "photo tags must be non-empty and contain no commas".to_owned(),
         ));
     }
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let mut request = client
         .http
         .get(format!("{ENDPOINT}/photos"))
-        .bearer_auth(&client.api_key);
+        .bearer_auth(&client.token);
     if let Some(limit) = input.limit {
         request = request.query(&[("limit", limit)]);
     }
@@ -295,9 +294,9 @@ fn build_url(id: &str) -> Result<reqwest::Url, ApiError> {
 
 pub async fn get(id: &str) -> Result<Photo, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let response = send(
-        client.http.get(url).bearer_auth(&client.api_key),
+        client.http.get(url).bearer_auth(&client.token),
         "read photo",
     )
     .await?;
@@ -306,12 +305,12 @@ pub async fn get(id: &str) -> Result<Photo, ApiError> {
 }
 
 pub async fn list() -> Result<Page, ApiError> {
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .get(format!("{ENDPOINT}/photos"))
-            .bearer_auth(&client.api_key)
+            .bearer_auth(&client.token)
             .query(&[("limit", "100")]),
         "list photos",
     )
@@ -324,12 +323,12 @@ pub async fn list() -> Result<Page, ApiError> {
 }
 
 pub async fn tags() -> Result<Vec<String>, ApiError> {
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .get(format!("{ENDPOINT}/tags"))
-            .bearer_auth(&client.api_key),
+            .bearer_auth(&client.token),
         "list photo tags",
     )
     .await?;
@@ -338,12 +337,12 @@ pub async fn tags() -> Result<Vec<String>, ApiError> {
 }
 
 pub async fn create(input: &Create) -> Result<Photo, ApiError> {
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .post(format!("{ENDPOINT}/photos"))
-            .bearer_auth(&client.api_key)
+            .bearer_auth(&client.token)
             .json(input),
         "create photo",
     )
@@ -412,12 +411,12 @@ pub async fn upload(
 
 pub async fn update(id: &str, input: &Update) -> Result<Photo, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .patch(url)
-            .bearer_auth(&client.api_key)
+            .bearer_auth(&client.token)
             .json(input),
         "update photo",
     )
@@ -428,11 +427,11 @@ pub async fn update(id: &str, input: &Update) -> Result<Photo, ApiError> {
 
 pub async fn delete(id: &str) -> Result<(), ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Moment)?;
+    let client = Client::load().await?;
     let response = client
         .http
         .delete(url)
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .send()
         .await?;
     if response.status() == StatusCode::NO_CONTENT {

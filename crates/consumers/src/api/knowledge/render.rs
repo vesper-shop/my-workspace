@@ -2,7 +2,6 @@ use super::{
     ApiError, Article, ArticlePage, Client, Document, EditionSummary, ListFilters,
     OVERVIEW_PAGE_SIZE, Summary, article_identity, read_summary_page,
 };
-use crate::api::credentials::ConsumerApi;
 use markdown::{ArticleMetadata, article_ids, article_urls, knowledge};
 use std::collections::{HashMap, HashSet};
 
@@ -142,7 +141,7 @@ fn resolve_card_metadata(
 }
 
 async fn reference_summaries() -> Result<Vec<Summary>, ApiError> {
-    let client = Client::load(ConsumerApi::Knowledge)?;
+    let client = Client::load().await?;
     let client_ref = &client;
     reference_pages(|filters| async move { read_summary_page(client_ref, &filters).await }).await
 }

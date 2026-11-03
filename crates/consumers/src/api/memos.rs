@@ -1,4 +1,3 @@
-use super::credentials::ConsumerApi;
 use super::{ApiError, Client, send};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -168,12 +167,12 @@ impl RemoteMemo {
 }
 
 pub async fn list(cursor: Option<String>, filters: &ListFilters) -> Result<Page, ApiError> {
-    let client = Client::load(ConsumerApi::Memos)?;
+    let client = Client::load().await?;
     let limit = filters.limit.unwrap_or(PAGE_SIZE).to_string();
     let mut request = client
         .http
         .get(format!("{ENDPOINT}/memos"))
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .query(&[("limit", limit)]);
     if let Some(cursor) = cursor.as_deref() {
         request = request.query(&[("cursor", cursor)]);
@@ -222,23 +221,19 @@ fn build_url(id: &str) -> Result<reqwest::Url, ApiError> {
 
 pub async fn read(id: &str) -> Result<MemoView, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Memos)?;
-    let response = send(
-        client.http.get(url).bearer_auth(&client.api_key),
-        "read memo",
-    )
-    .await?;
+    let client = Client::load().await?;
+    let response = send(client.http.get(url).bearer_auth(&client.token), "read memo").await?;
     let result: MemoResponse = response.json().await?;
     Ok(result.memo.into_view())
 }
 
 pub async fn tags() -> Result<Vec<TagCount>, ApiError> {
-    let client = Client::load(ConsumerApi::Memos)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .get(format!("{ENDPOINT}/tags"))
-            .bearer_auth(&client.api_key),
+            .bearer_auth(&client.token),
         "list memo tags",
     )
     .await?;
@@ -255,12 +250,12 @@ async fn submit(
     visibility: Visibility,
     favorite: bool,
 ) -> Result<MemoView, ApiError> {
-    let client = Client::load(ConsumerApi::Memos)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .post(format!("{ENDPOINT}/memos"))
-            .bearer_auth(&client.api_key)
+            .bearer_auth(&client.token)
             .json(&json!({
                 "content": content,
                 "tags": [],
@@ -299,12 +294,12 @@ pub async fn import_x(source_url: &str, visibility: Visibility) -> Result<MemoVi
 
 pub async fn update(id: &str, input: &Update) -> Result<MemoView, ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Memos)?;
+    let client = Client::load().await?;
     let response = send(
         client
             .http
             .patch(url)
-            .bearer_auth(&client.api_key)
+            .bearer_auth(&client.token)
             .json(input),
         "update memo",
     )
@@ -315,11 +310,11 @@ pub async fn update(id: &str, input: &Update) -> Result<MemoView, ApiError> {
 
 pub async fn delete(id: &str) -> Result<(), ApiError> {
     let url = build_url(id)?;
-    let client = Client::load(ConsumerApi::Memos)?;
+    let client = Client::load().await?;
     let response = client
         .http
         .delete(url)
-        .bearer_auth(&client.api_key)
+        .bearer_auth(&client.token)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .send()
         .await?;

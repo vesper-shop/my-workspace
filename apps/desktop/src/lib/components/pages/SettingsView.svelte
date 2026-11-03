@@ -29,7 +29,7 @@
 		{ id: "publishing", label: "Publishing", icon: Send },
 	];
 	import type { CommandResponse } from "@/lib/contracts/command";
-	import type { ApiConfiguration, CodexResets, ConfigurationStatus, NowledgeCredentials, NtfyConfig, NotionCalendar, R2Configuration, TelegramAuthorizationStatus, TelegramCredentials, UgosConfiguration } from "@/lib/contracts/settings";
+	import type { CodexResets, ConfigurationStatus, NowledgeCredentials, NtfyConfig, NotionCalendar, R2Configuration, TelegramAuthorizationStatus, TelegramCredentials, UgosConfiguration } from "@/lib/contracts/settings";
 
 	let {
 		reconnectMihoyo,
@@ -37,7 +37,7 @@
 		error,
 		onsaveugos,
 		onsaver2,
-		onsaveapi,
+		onswitchaccount,
 		onsaventfy,
 		onsavenowledge,
 		onsavenotion,
@@ -52,9 +52,9 @@
 		error: string | null;
 		onsaveugos: (input: UgosConfiguration) => Promise<CommandResponse<string>>;
 		onsaver2: (input: R2Configuration) => Promise<CommandResponse<string>>;
-		onsaveapi: (input: ApiConfiguration) => Promise<CommandResponse<string>>;
 		onsavecodexresets: (configuration: CodexResets) => Promise<CommandResponse<string>>;
 		onsavenotion: (configuration: NotionCalendar) => Promise<CommandResponse<string>>;
+		onswitchaccount: (command: "sign_in" | "sign_out") => Promise<CommandResponse<string>>;
 		onsaventfy: (configuration: NtfyConfig) => Promise<CommandResponse<string>>;
 		onsavenowledge: (credentials: NowledgeCredentials) => Promise<CommandResponse<string>>;
 		onsaveapplock: (password: string) => Promise<CommandResponse<string>>;
@@ -77,9 +77,6 @@
 	let password = $state("");
 	let accessKeyId = $state("");
 	let secretAccessKey = $state("");
-	let memosApiKey = $state("");
-	let momentApiKey = $state("");
-	let knowledgeApiKey = $state("");
 	let codexResetsEnabled = $state(false);
 	let codexResetsSaving = $state(false);
 	let codexResetsError = $state<string | null>(null);
@@ -94,9 +91,7 @@
 		"app-lock": false,
 		ugos: false,
 		r2: false,
-		memos: false,
-		moment: false,
-		knowledge: false,
+		account: false,
 		ntfy: false,
 		nowledge: false,
 		spotify: false,
@@ -107,7 +102,6 @@
 	let saved = $state({
 		ugos: { username: "", password: "" },
 		r2: { accessKeyId: "", secretAccessKey: "" },
-		api: { memos: "", moment: "", knowledge: "" },
 		ntfy: { token: "", development: false },
 		nowledge: { url: "", apiKey: "" },
 		appLock: "",
@@ -120,9 +114,7 @@
 		"app-lock": null,
 		ugos: null,
 		r2: null,
-		memos: null,
-		moment: null,
-		knowledge: null,
+		account: null,
 		ntfy: null,
 		nowledge: null,
 		spotify: null,
@@ -132,9 +124,6 @@
 	});
 	let passwordVisible = $state(false);
 	let secretVisible = $state(false);
-	let memosKeyVisible = $state(false);
-	let momentKeyVisible = $state(false);
-	let knowledgeKeyVisible = $state(false);
 	let ntfyTokenVisible = $state(false);
 	let nowledgeKeyVisible = $state(false);
 	let appLockPasswordVisible = $state(false);
@@ -184,21 +173,6 @@
 			appLockPassword.length >= 4 &&
 			appLockPassword.trim() !== "" &&
 			appLockPassword !== saved.appLock,
-		memos:
-			configuration !== null &&
-			!saving.memos &&
-			memosApiKey.trim() !== "" &&
-			memosApiKey.trim() !== saved.api.memos.trim(),
-		moment:
-			configuration !== null &&
-			!saving.moment &&
-			momentApiKey.trim() !== "" &&
-			momentApiKey.trim() !== saved.api.moment.trim(),
-		knowledge:
-			configuration !== null &&
-			!saving.knowledge &&
-			knowledgeApiKey.trim() !== "" &&
-			knowledgeApiKey.trim() !== saved.api.knowledge.trim(),
 		telegram:
 			configuration !== null &&
 			!saving.telegram &&
@@ -226,18 +200,6 @@
 				accessKeyId = initial.r2.data.accessKeyId;
 				secretAccessKey = initial.r2.data.secretAccessKey;
 				saved.r2 = { accessKeyId, secretAccessKey };
-			}
-			if (initial.api.memos.status === "ready") {
-				memosApiKey = initial.api.memos.data;
-				saved.api.memos = memosApiKey;
-			}
-			if (initial.api.moment.status === "ready") {
-				momentApiKey = initial.api.moment.data;
-				saved.api.moment = momentApiKey;
-			}
-			if (initial.api.knowledge.status === "ready") {
-				knowledgeApiKey = initial.api.knowledge.data;
-				saved.api.knowledge = knowledgeApiKey;
 			}
 			codexResetsEnabled = initial.codexResets.enabled;
 			saved.codexResets = codexResetsEnabled;
@@ -312,20 +274,13 @@
 		saved.r2 = submitted;
 	}
 
-	async function saveApi(service: "memos" | "moment" | "knowledge") {
-		if (!canSave[service]) return;
-		let apiKey = knowledgeApiKey;
-		if (service === "memos") apiKey = memosApiKey;
-		if (service === "moment") apiKey = momentApiKey;
-		saving[service] = true;
-		formErrors[service] = null;
-		const response = await onsaveapi({ service, apiKey });
-		saving[service] = false;
-		if (response.status === "failed") {
-			formErrors[service] = response.message;
-			return;
-		}
-		saved.api[service] = apiKey;
+	async function switchAccount(command: "sign_in" | "sign_out") {
+		if (saving.account) return;
+		saving.account = true;
+		formErrors.account = null;
+		const response = await onswitchaccount(command);
+		saving.account = false;
+		if (response.status === "failed") formErrors.account = response.message;
 	}
 
 	async function saveAppLock(event: SubmitEvent) {
@@ -747,48 +702,26 @@
 	</Card>
 
 	<Card>
-		<CardHeader class="settings-card-header">
+		<CardHeader class="settings-card-header settings-card-header-status">
 			<span class="settings-icon"><KeyRound size={16} /></span>
-			<div><CardTitle class="settings-card-title">Content services</CardTitle><CardDescription class="settings-card-description">Connect your Memos, Moment and Knowledge collections.</CardDescription></div>
+			<div><CardTitle class="settings-card-title">you-find.me</CardTitle><CardDescription class="settings-card-description">One sign-in opens Memos, Moment and Knowledge.</CardDescription></div>
+			{#if configuration?.account.status === "ready"}<ConfigurationBadge />{/if}
 		</CardHeader>
-		{@render failure(formErrors["memos"])}
-		{@render failure(formErrors["moment"])}
-		{@render failure(formErrors["knowledge"])}
-		<div class="api-settings">
+		{@render failure(formErrors.account)}
+		<CardContent class="settings-card-content">
 			<div class="settings-row">
-				<div><Label for="memos-api-key">my-memos API key</Label><p>Bearer key generated by the my-memos REST API settings.</p></div>
-				<div class="api-input">
-					<div class="secret-field">
-						<Input id="memos-api-key" class="settings-input settings-secret-input" type={memosKeyVisible ? "text" : "password"} bind:value={memosApiKey} autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Bearer API key" />
-						<Button type="button" class="settings-secret-toggle" variant="ghost" size="icon" onclick={() => (memosKeyVisible = !memosKeyVisible)} aria-label={memosKeyVisible ? "Hide my-memos API key" : "Show my-memos API key"}>{#if memosKeyVisible}<EyeOff size={14} />{:else}<Eye size={14} />{/if}</Button>
+				{#if configuration?.account.status === "ready"}
+					<div class="account">
+						{#if configuration.account.data.picture}<img class="account-picture" src={configuration.account.data.picture} alt="" />{/if}
+						<div><Label>{configuration.account.data.name}</Label><p>{configuration.account.data.email}</p></div>
 					</div>
-					<Button type="button" size="sm" disabled={!canSave.memos} onclick={() => saveApi("memos")}>{saving.memos ? "Saving…" : "Save"}</Button>
-					{#if configuration !== null && configuration.api.memos.status === "ready"}<ConfigurationBadge />{/if}
-				</div>
+					<Button class="settings-save-button" size="sm" type="button" variant="outline" disabled={saving.account} onclick={() => switchAccount("sign_out")}>{saving.account ? "Signing out…" : "Sign out"}</Button>
+				{:else}
+					<div><Label>Browser sign-in</Label><p>Vesper opens you-find.me in your browser and returns here.</p></div>
+					<Button class="settings-save-button" size="sm" type="button" disabled={saving.account || configuration === null} onclick={() => switchAccount("sign_in")}>{saving.account ? "Waiting for you-find.me…" : "Sign in"}</Button>
+				{/if}
 			</div>
-			<div class="settings-row">
-				<div><Label for="moment-api-key">my-moment API key</Label><p>Bearer key generated by the my-moment API settings.</p></div>
-				<div class="api-input">
-					<div class="secret-field">
-						<Input id="moment-api-key" class="settings-input settings-secret-input" type={momentKeyVisible ? "text" : "password"} bind:value={momentApiKey} autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Bearer API key" />
-						<Button type="button" class="settings-secret-toggle" variant="ghost" size="icon" onclick={() => (momentKeyVisible = !momentKeyVisible)} aria-label={momentKeyVisible ? "Hide my-moment API key" : "Show my-moment API key"}>{#if momentKeyVisible}<EyeOff size={14} />{:else}<Eye size={14} />{/if}</Button>
-					</div>
-					<Button type="button" size="sm" disabled={!canSave.moment} onclick={() => saveApi("moment")}>{saving.moment ? "Saving…" : "Save"}</Button>
-					{#if configuration !== null && configuration.api.moment.status === "ready"}<ConfigurationBadge />{/if}
-				</div>
-			</div>
-			<div class="settings-row">
-				<div><Label for="knowledge-api-key">my-knowledge API key</Label><p>Bearer key generated by the my-knowledge API settings.</p></div>
-				<div class="api-input">
-					<div class="secret-field">
-						<Input id="knowledge-api-key" class="settings-input settings-secret-input" type={knowledgeKeyVisible ? "text" : "password"} bind:value={knowledgeApiKey} autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Bearer API key" />
-						<Button type="button" class="settings-secret-toggle" variant="ghost" size="icon" onclick={() => (knowledgeKeyVisible = !knowledgeKeyVisible)} aria-label={knowledgeKeyVisible ? "Hide my-knowledge API key" : "Show my-knowledge API key"}>{#if knowledgeKeyVisible}<EyeOff size={14} />{:else}<Eye size={14} />{/if}</Button>
-					</div>
-					<Button type="button" size="sm" disabled={!canSave.knowledge} onclick={() => saveApi("knowledge")}>{saving.knowledge ? "Saving…" : "Save"}</Button>
-					{#if configuration !== null && configuration.api.knowledge.status === "ready"}<ConfigurationBadge />{/if}
-				</div>
-			</div>
-		</div>
+		</CardContent>
 	</Card>
 
 
@@ -870,11 +803,10 @@
 	.settings-group[hidden] { display: none; }
 	.settings-content :global([data-slot="card"]) { overflow: hidden; box-shadow: none; }
 	.secret-field { position: relative; min-width: 0; }
+	.account { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+	.account-picture { width: 2.25rem; height: 2.25rem; flex: none; border-radius: 9999px; object-fit: cover; }
 	.settings-footer-copy { min-width: 0; overflow-wrap: anywhere; color: var(--color-muted-foreground); font-size: 0.68rem; line-height: 1.5; }
 	form { border-top: 1px solid var(--color-border); }
-	.api-settings { border-top: 1px solid var(--color-border); }
-	.api-input { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; }
-	.api-input :global(.configuration-badge) { grid-column: 1 / -1; }
 	.lock-actions { display: flex; align-items: center; gap: 0.4rem; }
 
 	@media (max-width: 900px) {

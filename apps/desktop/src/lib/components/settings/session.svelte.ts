@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type { CommandResponse } from "@/lib/contracts/command";
 import type { Channel } from "@/lib/contracts/content";
 import type {
-	ApiConfiguration,
 	CodexResets,
 	ConfigurationStatus,
 	NowledgeCredentials,
@@ -57,13 +56,11 @@ export function createSettingsSession(effects: {
 		return response;
 	}
 
-	async function saveApiConfiguration(input: ApiConfiguration): Promise<CommandResponse<string>> {
-		const response = await invoke<CommandResponse<string>>("save_api_configuration", {
-			service: input.service,
-			apiKey: input.apiKey,
-		});
+	async function switchAccount(command: "sign_in" | "sign_out"): Promise<CommandResponse<string>> {
+		const response = await invoke<CommandResponse<string>>(command);
 		if (response.status === "ready") {
-			effects.resetChannel(input.service);
+			for (const channel of ["memos", "moment", "knowledge"] as const)
+				effects.resetChannel(channel);
 			await loadConfiguration();
 			await effects.initializeConsumers();
 		}
@@ -141,7 +138,7 @@ export function createSettingsSession(effects: {
 		loadConfiguration,
 		saveUgosConfiguration,
 		saveR2Configuration,
-		saveApiConfiguration,
+		switchAccount,
 		connectSpotify,
 		saveNtfy,
 		saveNowledge,

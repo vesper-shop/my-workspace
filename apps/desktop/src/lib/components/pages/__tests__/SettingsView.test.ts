@@ -4,7 +4,6 @@ import { fromStore, writable } from "svelte/store";
 import type { CommandResponse } from "@/lib/contracts/command";
 import type { GameConnections } from "@/lib/contracts/games";
 import type {
-	ApiConfiguration,
 	CodexResets,
 	ConfigurationStatus,
 	NowledgeCredentials,
@@ -29,11 +28,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 const initial: ConfigurationStatus = {
 	ugos: { status: "ready", data: { username: "user", password: "password" } },
 	r2: { status: "ready", data: { accessKeyId: "access", secretAccessKey: "secret" } },
-	api: {
-		memos: { status: "ready", data: "memos-key" },
-		moment: { status: "ready", data: "moment-key" },
-		knowledge: { status: "ready", data: "knowledge-key" },
-	},
+	account: { status: "ready", data: { email: "owner@example.com", name: "Owner", picture: null } },
 	ntfy: { status: "ready", data: { token: "ntfy-token", development: false } },
 	ntfyDev: false,
 	notionCalendar: { status: "missing" },
@@ -63,7 +58,6 @@ async function setup(initialConfiguration: ConfigurationStatus = initial) {
 		.fn<
 			(
 				input:
-					| ApiConfiguration
 					| NowledgeCredentials
 					| NtfyConfig
 					| NotionCalendar
@@ -85,7 +79,7 @@ async function setup(initialConfiguration: ConfigurationStatus = initial) {
 				error: null,
 				onsaveugos: save,
 				onsaver2: save,
-				onsaveapi: save,
+				onswitchaccount: vi.fn().mockResolvedValue({ status: "ready", data: "account" }),
 				onsavenotion: save,
 				onsavecodexresets: save,
 				onsaventfy: save,
@@ -157,12 +151,12 @@ it("prefills the Spotify Client ID, preserves edits and submits the chosen app",
 });
 
 it("preserves unsaved fields when switching settings categories", async () => {
-	const { target, edit, field, button } = await setup();
+	const { target, edit, field } = await setup();
 	const general = target.querySelector("#settings-general");
 	const services = target.querySelector("#settings-services");
 	expect(general?.hasAttribute("hidden")).toBe(false);
 	expect(services?.hasAttribute("hidden")).toBe(true);
-	await edit("memos-api-key", "unsaved-key");
+	await edit("nowledge-url", "https://unsaved.example");
 	for (const category of ["services", "music", "services"]) {
 		const navigation = target.querySelector(`button[aria-controls="settings-${category}"]`);
 		if (!(navigation instanceof HTMLButtonElement)) throw new Error("Missing category");
@@ -171,10 +165,9 @@ it("preserves unsaved fields when switching settings categories", async () => {
 		expect(navigation.getAttribute("aria-pressed")).toBe("true");
 		if (category === "music") continue;
 		expect(services?.hasAttribute("hidden")).toBe(false);
-		expect(field("memos-api-key").value).toBe("unsaved-key");
+		expect(field("nowledge-url").value).toBe("https://unsaved.example");
 	}
-	expect(field("memos-api-key").value).toBe("unsaved-key");
-	expect(button("memos-api-key").disabled).toBe(false);
+	expect(field("nowledge-url").value).toBe("https://unsaved.example");
 	expect(general?.hasAttribute("hidden")).toBe(true);
 });
 
@@ -183,9 +176,6 @@ it.each([
 	["ugos-password", "password"],
 	["r2-access-key", "access"],
 	["r2-secret-key", "secret"],
-	["memos-api-key", "memos-key"],
-	["moment-api-key", "moment-key"],
-	["knowledge-api-key", "knowledge-key"],
 	["ntfy-token", "ntfy-token"],
 	["app-lock-password", "lock-password"],
 ])("enables %s only for complete, changed input and resets after saving", async (id, original) => {
@@ -203,51 +193,6 @@ it.each([
 	await form.submit(id);
 	expect(form.save).toHaveBeenCalledOnce();
 	expect(form.button(id).disabled).toBe(true);
-});
-
-it("keeps pending saves independent and preserves later edits across configuration refreshes", async () => {
-	const form = await setup();
-	const completions = new EventTarget();
-	const memos = new Promise<CommandResponse<string>>((resolve) => {
-		completions.addEventListener("memos", () => resolve({ status: "ready", data: "Saved" }), {
-			once: true,
-		});
-	});
-	const moment = new Promise<CommandResponse<string>>((resolve) => {
-		completions.addEventListener(
-			"moment",
-			() => resolve({ status: "failed", message: "Could not save" }),
-			{ once: true },
-		);
-	});
-	form.save.mockReturnValueOnce(memos).mockReturnValueOnce(moment);
-	await form.edit("memos-api-key", "memos-submitted");
-	await form.edit("moment-api-key", "moment-submitted");
-	await form.submit("memos-api-key");
-	expect(form.button("memos-api-key").disabled).toBe(true);
-	expect(form.button("moment-api-key").disabled).toBe(false);
-	await form.submit("moment-api-key");
-	await form.edit("memos-api-key", "memos-next-draft");
-	await form.edit("ntfy-token", "ntfy-draft");
-	form.configuration.set({
-		...structuredClone(initial),
-		api: {
-			...initial.api,
-			memos: { status: "ready", data: "memos-submitted" },
-		},
-	});
-	await tick();
-	completions.dispatchEvent(new Event("memos"));
-	await tick();
-	expect(form.field("memos-api-key").value).toBe("memos-next-draft");
-	expect(form.field("ntfy-token").value).toBe("ntfy-draft");
-	await vi.waitFor(() => expect(form.button("memos-api-key").disabled).toBe(false));
-	expect(form.button("moment-api-key").disabled).toBe(true);
-	completions.dispatchEvent(new Event("moment"));
-	await tick();
-	await vi.waitFor(() => expect(form.button("moment-api-key").disabled).toBe(false));
-	await form.edit("memos-api-key", "memos-submitted");
-	expect(form.button("memos-api-key").disabled).toBe(true);
 });
 
 it("tracks the submitted Notion link while preserving edits made during saving", async () => {
