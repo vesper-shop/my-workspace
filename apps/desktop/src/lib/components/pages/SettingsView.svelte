@@ -754,7 +754,7 @@
 	<Card>
 		<CardHeader class="settings-card-header settings-card-header-status">
 			<span class="settings-icon"><Cloud size={16} /></span>
-			<div><CardTitle class="settings-card-title">Cloudflare R2</CardTitle><CardDescription class="settings-card-description">Read and publish content in cherry-studio.</CardDescription></div>
+			<div><CardTitle class="settings-card-title">Cloudflare R2</CardTitle><CardDescription class="settings-card-description">Optional for Moment: reads and uploads photos directly. Required to publish content in cherry-studio.</CardDescription></div>
 			{#if configuration !== null && configuration.r2.status === "ready"}<ConfigurationBadge />{/if}
 		</CardHeader>
 		{@render failure(formErrors["r2"])}
@@ -772,7 +772,7 @@
 				</div>
 			</div>
 			</CardContent>
-			<CardFooter class="settings-card-footer"><span class="settings-footer-copy">Changes apply to every R2-backed view immediately.</span><Button class="settings-save-button" size="sm" type="submit" disabled={!canSave.r2}>{#if saving.r2}Saving…{:else}Save{/if}</Button></CardFooter>
+			<CardFooter class="settings-card-footer"><span class="settings-footer-copy">Changes apply immediately.</span><Button class="settings-save-button" size="sm" type="submit" disabled={!canSave.r2}>{#if saving.r2}Saving…{:else}Save{/if}</Button></CardFooter>
 		</form>
 	</Card>
 	</section>

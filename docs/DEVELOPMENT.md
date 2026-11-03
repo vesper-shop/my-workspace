@@ -5,7 +5,7 @@
 Use Rust `1.95` or newer, Node.js `^22.18.0 || ^24.11.0 || >=26.0.0`,
 pnpm `12.6.0` (pinned in `package.json`), and the platform
 build dependencies required by Tauri v2. The desktop app requires macOS 12 or newer on Mac.
-R2 access is needed for publication and Moment image transfer; UGOS requires Tailscale with MagicDNS.
+R2 access is needed for publication and optional for Moment, which otherwise reads public images and uploads through its API; UGOS requires Tailscale with MagicDNS.
 
 ## Root commands
 

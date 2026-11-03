@@ -77,11 +77,11 @@ pub async fn run(action: &str, arguments: &[String]) -> Result<(), String> {
             let source = tokio::fs::read(source_path).await.map_err(|error| {
                 format!("could not read photo source image {source_path}: {error}")
             })?;
-            let store = cms::r2::Store::from_credentials()
+            let store = cms::r2::Store::configured()
                 .await
                 .map_err(|error| error.to_string())?;
             let photo = consumers::api::moment::upload(
-                &store,
+                store.as_ref(),
                 input,
                 source,
                 consumers::api::moment::MetadataPolicy::SourceDefaults,

@@ -358,7 +358,7 @@ pub async fn create(input: &Create) -> Result<Photo, ApiError> {
 }
 
 pub async fn upload(
-    store: &Store,
+    store: Option<&Store>,
     mut input: Upload,
     source: Vec<u8>,
     metadata_policy: MetadataPolicy,
@@ -369,6 +369,53 @@ pub async fn upload(
         .map_err(|_| ApiError::Protocol("photo processor stopped unexpectedly".to_owned()))?;
     let prepared = prepare_task.map_err(ApiError::Media)?;
     input.apply_metadata(prepared.metadata, metadata_policy);
+    let tags = input
+        .tags
+        .into_iter()
+        .map(|tag| tag.trim().to_lowercase())
+        .collect::<Vec<_>>();
+    let aspect_ratio = f64::from(prepared.width) / f64::from(prepared.height);
+    let Some(store) = store else {
+        let mut form = reqwest::multipart::Form::new()
+            .part(
+                "file",
+                reqwest::multipart::Part::bytes(prepared.original)
+                    .file_name("photo.png")
+                    .mime_str("image/png")?,
+            )
+            .part(
+                "thumbnail",
+                reqwest::multipart::Part::bytes(prepared.thumbnail)
+                    .file_name("thumbnail.jpg")
+                    .mime_str("image/jpeg")?,
+            )
+            .text("title", input.title)
+            .text("tags", serde_json::json!(tags).to_string())
+            .text("thumbHash", prepared.thumb_hash)
+            .text("width", prepared.width.to_string())
+            .text("height", prepared.height.to_string())
+            .text("aspectRatio", aspect_ratio.to_string());
+        if let Some(description) = input.description {
+            form = form.text("description", description);
+        }
+        if let Some(date) = input.date {
+            form = form.text("date", date);
+        }
+        if let Some(geo) = input.geo {
+            form = form.text("geo", serde_json::json!(geo).to_string());
+        }
+        let client = Client::load().await?;
+        let response = send(
+            client
+                .http
+                .post(format!("{ENDPOINT}/photos/upload"))
+                .bearer_auth(&client.token)
+                .multipart(form),
+            "upload photo",
+        )
+        .await?;
+        return Ok(response.json().await?);
+    };
     let id = uuid::Uuid::new_v4();
     let r2_key = format!("img/{id}.png");
     let thumbnail_r2_key = format!("img/thumbnails/{id}.jpg");
@@ -389,17 +436,13 @@ pub async fn upload(
         thumbnail_r2_key: thumbnail_r2_key.clone(),
         title: input.title,
         description: input.description,
-        tags: input
-            .tags
-            .into_iter()
-            .map(|tag| tag.trim().to_lowercase())
-            .collect(),
+        tags,
         date: input.date,
         geo: input.geo,
         thumb_hash: Some(prepared.thumb_hash),
         width: prepared.width,
         height: prepared.height,
-        aspect_ratio: Some(f64::from(prepared.width) / f64::from(prepared.height)),
+        aspect_ratio: Some(aspect_ratio),
         format: Some("PNG".to_owned()),
     };
     create(&metadata).await.map_err(|error| {
@@ -407,6 +450,19 @@ pub async fn upload(
             "photo registration could not be confirmed: {error}; retained objects {r2_key} and {thumbnail_r2_key}; check the gallery before retrying or removing these objects"
         ))
     })
+}
+
+pub async fn image(key: &str) -> Result<Vec<u8>, ApiError> {
+    let response = send(
+        reqwest::Client::builder()
+            .timeout(super::REQUEST_TIMEOUT)
+            .user_agent(concat!("Vesper/", env!("CARGO_PKG_VERSION"), " consumers"))
+            .build()?
+            .get(format!("{ENDPOINT}/photos/{key}")),
+        "read photo image",
+    )
+    .await?;
+    Ok(response.bytes().await?.to_vec())
 }
 
 pub async fn update(id: &str, input: &Update) -> Result<Photo, ApiError> {

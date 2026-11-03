@@ -132,18 +132,20 @@ impl Default for Content {
 }
 
 impl Content {
-    pub(crate) async fn repository(&self) -> Result<Arc<Repository>, String> {
+    pub(crate) async fn repository(&self) -> Result<Option<Arc<Repository>>, String> {
         let mut state = self.repository.lock().await;
         if let Some(repository) = state.as_ref() {
-            return Ok(Arc::clone(repository));
+            return Ok(Some(Arc::clone(repository)));
         }
-        let repository = ::cms::r2::Store::from_credentials()
+        let Some(store) = ::cms::r2::Store::configured()
             .await
-            .map(Repository::new)
-            .map(Arc::new)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(None);
+        };
+        let repository = Arc::new(Repository::new(store));
         *state = Some(Arc::clone(&repository));
-        Ok(repository)
+        Ok(Some(repository))
     }
 
     pub(crate) async fn clear_assets(&self) {
@@ -175,7 +177,7 @@ impl Content {
             Some(result) => result.clone(),
             None => {
                 let result = match self.repository().await {
-                    Ok(repository) => consumers::view::asset(key, repository.as_ref())
+                    Ok(repository) => consumers::view::asset(key, repository.as_deref())
                         .await
                         .map(Arc::new)
                         .map_err(|error| error.to_string()),

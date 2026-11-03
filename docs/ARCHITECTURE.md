@@ -177,11 +177,11 @@ repository, view and image caches; its submodules adapt commands. Cache revision
 read from
 restoring invalidated content. Writes retain each consumer's server-side coordination.
 
-| Consumer  | Boundary                                                                                                                                                                                                         |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Memos     | API records include Markdown; Rust compiles it without another R2 read. CRUD and X imports use the Memo API.                                                                                                     |
-| Moment    | API owns metadata; Rust prepares image variants, uploads them to R2, then registers them. The list is a bounded batch without a synthetic cursor.                                                                |
-| Knowledge | API summaries form the metadata-only index. Opening a document performs an authorized detail read and Rust compilation. Writes require both the content hash and exact updated timestamp for conflict detection. |
+| Consumer  | Boundary                                                                                                                                                                                                                                                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Memos     | API records include Markdown; Rust compiles it without another R2 read. CRUD and X imports use the Memo API.                                                                                                                                                                                           |
+| Moment    | API owns metadata; Rust prepares image variants. With R2 credentials it uploads them to R2, then registers them; otherwise it posts them to the upload API. Images are read from R2 when configured and from the public photo route otherwise. The list is a bounded batch without a synthetic cursor. |
+| Knowledge | API summaries form the metadata-only index. Opening a document performs an authorized detail read and Rust compilation. Writes require both the content hash and exact updated timestamp for conflict detection.                                                                                       |
 
 ### Consumer open API
 

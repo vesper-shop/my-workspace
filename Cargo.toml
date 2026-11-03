@@ -107,6 +107,7 @@ reqwest = { version = "0.13", default-features = false, features = [
   "cookies",
   "form",
   "json",
+  "multipart",
   "query",
   "rustls",
   "stream",

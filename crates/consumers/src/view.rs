@@ -51,6 +51,7 @@ pub enum ChannelView {
 pub enum ConsumerError {
     UnknownChannel(String),
     Store(StoreError),
+    Public(crate::api::ApiError),
 }
 
 impl Display for ConsumerError {
@@ -60,6 +61,7 @@ impl Display for ConsumerError {
                 write!(formatter, "unknown consumer channel: {channel}")
             }
             Self::Store(source) => Display::fmt(source, formatter),
+            Self::Public(source) => Display::fmt(source, formatter),
         }
     }
 }
@@ -68,6 +70,7 @@ impl Error for ConsumerError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Store(source) => Some(source),
+            Self::Public(source) => Some(source),
             Self::UnknownChannel(..) => None,
         }
     }
@@ -93,7 +96,7 @@ impl Repository {
     }
 }
 
-pub async fn asset(key: &str, repository: &Repository) -> Result<Vec<u8>, ConsumerError> {
+pub async fn asset(key: &str, repository: Option<&Repository>) -> Result<Vec<u8>, ConsumerError> {
     let outside_image_prefix = !key.starts_with("img/");
     let has_reserved_char = key.contains(['\\', '%', '?', '#']);
     let contains_parent_segment = key.split('/').any(|part| matches!(part, "." | ".."));
@@ -102,7 +105,12 @@ pub async fn asset(key: &str, repository: &Repository) -> Result<Vec<u8>, Consum
             "only img/ object keys can be displayed".to_owned(),
         )));
     }
-    Ok(repository.store.get(key).await?)
+    match repository {
+        Some(repository) => Ok(repository.store.get(key).await?),
+        None => crate::api::moment::image(key)
+            .await
+            .map_err(ConsumerError::Public),
+    }
 }
 
 #[cfg(test)]

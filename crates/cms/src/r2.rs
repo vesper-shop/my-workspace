@@ -106,6 +106,14 @@ impl Store {
         })
     }
 
+    pub async fn configured() -> Result<Option<Self>, StoreError> {
+        match Self::from_credentials().await {
+            Ok(store) => Ok(Some(store)),
+            Err(StoreError::MissingCredentials) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
     pub async fn get(&self, key: &str) -> Result<Vec<u8>, StoreError> {
         tokio::time::timeout(OBJECT_READ_TIMEOUT, async {
             let response = self
