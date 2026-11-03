@@ -11,7 +11,30 @@ use tokio::net::TcpListener;
 type Client = BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 const MAX_CALLBACK_LINE_BYTES: usize = 8 * 1024;
 const CALLBACK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-const RETURN_URL: &str = "vesper://";
+macro_rules! callback_page {
+    ($head:literal, $title:literal, $message:literal) => {
+        concat!(
+            "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">",
+            $head,
+            "<title>Vesper</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 system-ui,sans-serif;background:#fafafa;color:#18181b}main{max-width:22rem;padding:1.5rem;text-align:center}h1{margin:0 0 .5rem;font-size:1.125rem;font-weight:500}p{margin:0;color:#71717a}@media (prefers-color-scheme:dark){body{background:#09090b;color:#fafafa}p{color:#a1a1aa}}</style><main><h1>",
+            $title,
+            "</h1><p>",
+            $message,
+            "</p></main>"
+        )
+    };
+}
+
+const SUCCESS_PAGE: &str = callback_page!(
+    "<meta http-equiv=\"refresh\" content=\"0;url=vesper://\">",
+    "Authorization complete",
+    "Vesper is signed in. You can close this page."
+);
+const FAILURE_PAGE: &str = callback_page!(
+    "",
+    "Authorization failed",
+    "Authorization could not be completed. Return to Vesper and try again."
+);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -229,17 +252,15 @@ async fn wait_for_code(authorization: &Authorization) -> Result<String, Error> {
         let result = url.and_then(|url| {
             parse_callback(&url, &authorization.path, authorization.state.secret())
         });
-        let response = if result.is_ok() {
-            format!(
-                "HTTP/1.1 302 Found\r\nLocation: {RETURN_URL}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
+        let (status, body) = if result.is_ok() {
+            ("200 OK", SUCCESS_PAGE)
         } else {
-            let body = "<!doctype html><meta charset=\"utf-8\"><title>Vesper</title><p>Authorization could not be completed. Return to Vesper and try again.</p>";
-            format!(
-                "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
+            ("400 Bad Request", FAILURE_PAGE)
         };
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
         let _ = tokio::time::timeout(
             Duration::from_secs(10),
             stream.write_all(response.as_bytes()),

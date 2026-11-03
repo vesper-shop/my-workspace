@@ -3,9 +3,9 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
-#[cfg(not(target_os = "macos"))]
-use tauri::menu::HELP_SUBMENU_ID;
-use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind};
+use tauri::menu::MenuEvent;
+#[cfg(target_os = "macos")]
+use tauri::menu::{Menu, MenuItem, MenuItemKind};
 use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -61,17 +61,16 @@ enum UpdateProgress {
     Downloaded,
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::default(app)?;
     let check_for_updates =
         MenuItem::with_id(app, CHECK_MENU_ID, "Check for Updates…", true, None::<&str>)?;
 
-    #[cfg(target_os = "macos")]
     if let Some(MenuItemKind::Submenu(application_menu)) = menu.items()?.into_iter().next() {
         application_menu.insert(&check_for_updates, 1)?;
     }
 
-    #[cfg(target_os = "macos")]
     for item in menu.items()? {
         let MenuItemKind::Submenu(submenu) = item else {
             continue;
@@ -90,11 +89,6 @@ pub(crate) fn menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         submenu.prepend(&toggle_devtools)?;
         submenu.prepend(&reload)?;
         break;
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    if let Some(MenuItemKind::Submenu(help_menu)) = menu.get(HELP_SUBMENU_ID) {
-        help_menu.prepend(&check_for_updates)?;
     }
 
     Ok(menu)

@@ -104,8 +104,10 @@ async fn pkce_exchange() {
         reqwest::StatusCode::BAD_REQUEST
     );
     let response = browser.get(callback).send().await.unwrap();
-    assert_eq!(response.status(), reqwest::StatusCode::FOUND);
-    assert_eq!(response.headers()["location"], "vesper://");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let page = response.text().await.unwrap();
+    assert!(page.contains("url=vesper://"));
+    assert!(page.contains("You can close this page."));
     let token = task.await.unwrap().unwrap();
     assert_eq!(token.access_token, "access");
     assert_eq!(token.refresh_token.as_deref(), Some("refresh"));

@@ -72,7 +72,10 @@ pub fn run() {
     }
     tracing::info!("starting desktop application");
 
-    let result = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(updater::menu);
+    let result = builder
         .register_asynchronous_uri_scheme_protocol("vesper-asset", protocol::asset)
         .register_asynchronous_uri_scheme_protocol("vesper-music-cover", protocol::music_cover)
         .manage(island::Visibility::default())
@@ -88,7 +91,6 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .menu(updater::menu)
         .on_menu_event(|app, event| updater::handle_menu_event(app, &event))
         .on_page_load(|window, payload| {
             if window.label() != "main"

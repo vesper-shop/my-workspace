@@ -31,7 +31,8 @@ Package `check` runs local formatting, lint, and types. `lint:fix:frontend` appl
 Cargo retains its incremental build cache. Use `vp run lint` and `vp run check`, since built-in
 `vp lint` and `vp check` still invoke Oxlint. The binaries are `vesper` (CLI) and `vesper-desktop`.
 
-The macOS View menu offers Reload and Developer Tools in debug and packaged builds. Reload preserves
+Only macOS installs an application menu; Windows and Linux windows have no native menu bar. The
+macOS View menu offers Reload and Developer Tools in debug and packaged builds. Reload preserves
 App Lock state. Tools require an unlocked session and close when locked; a restart starts unlocked.
 Set `RUST_LOG=debug` when investigating Rust behavior, without logging secrets or account responses.
 

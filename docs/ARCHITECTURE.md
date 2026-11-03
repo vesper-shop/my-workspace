@@ -112,7 +112,8 @@ installed packages persist the conversation. Terminal state survives navigation 
 `crates/oauth` adapts `oauth2` to the workspace reqwest transport and uses `httparse` for loopback
 request parsing. Spotify and X share that boundary; their feature crates retain endpoints, scopes,
 client selection, credential storage and refresh-token rotation policy. Token requests use system
-proxies, bounded timeouts and no redirects; callback and token failures omit response bodies.
+proxies, bounded timeouts and no redirects; callback and token failures omit response bodies. A
+successful callback serves a page that says the browser tab can be closed and opens `vesper://`.
 
 QQ Music keeps session renewal and Cookie authentication in `qq/auth.rs`, shared with QR login;
 the provider root owns library and playback coordination, and `qq/audio.rs` owns audio execution.
