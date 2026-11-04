@@ -136,6 +136,7 @@ it("collapses the sidebar and restores its saved width", async () => {
 	await tick();
 	expect(target.querySelector("aside")?.classList.contains("compact")).toBe(false);
 	expect(saved.get("vesper.sidebar.width")).toBe("360");
+	expect(target.querySelector(".user-identity small")?.textContent).toBe("owner@example.com");
 });
 
 it("renders ready tags before initialization and the other source finish; failed tags can retry", async () => {

@@ -295,7 +295,11 @@
 		<DeviceSidebar session={terminals} compact={sidebarWidth < 160} active={selected === "terminal"} onopen={openTerminal} />
 
 		<div class="sidebar-footer">
-			<ProfileEditor compact={sidebarWidth < 160} bind:profileAvatar />
+			<ProfileEditor
+				compact={sidebarWidth < 160}
+				email={settings.configuration?.account.status === "ready" ? settings.configuration.account.data.email : null}
+				bind:profileAvatar
+			/>
 			<div class="footer-controls">
 				{#if viewAvailable("inbox")}
 				<div class="footer-navigation">

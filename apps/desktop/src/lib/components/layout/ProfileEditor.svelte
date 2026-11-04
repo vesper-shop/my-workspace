@@ -5,7 +5,11 @@
 	const profileNameKey = "vesper.profile.name";
 	const profileAvatarKey = "vesper.profile.avatar";
 	let profileName = $state("Pleasure1234");
-	let { compact, profileAvatar = $bindable(defaultProfileAvatar) }: { compact: boolean; profileAvatar?: string } = $props();
+	let {
+		compact,
+		email = null,
+		profileAvatar = $bindable(defaultProfileAvatar),
+	}: { compact: boolean; email?: string | null; profileAvatar?: string } = $props();
 	let profileEditing = $state(false);
 	let profileNameDraft = $state("Pleasure1234");
 	let profileAvatarDraft = $state(defaultProfileAvatar);
@@ -117,7 +121,10 @@
 		<form onsubmit={saveProfile}>
 			<div class="profile-editor-heading">
 				<img src={profileAvatarDraft} alt="Profile preview" />
-				<div><strong>Local profile</strong><span>Display only</span></div>
+				<div>
+					<strong>Local profile</strong>
+					<span>{email ?? "Display only"}</span>
+				</div>
 			</div>
 			<Label for="profile-name">Username</Label>
 			<Input id="profile-name" bind:ref={profileNameInput} maxlength="24" autocomplete="off" bind:value={profileNameDraft} />
@@ -131,9 +138,12 @@
 		</form>
 		</div>
 	{/if}
-	<button class="user-profile" type="button" onclick={toggleProfileEditor} aria-haspopup="dialog" aria-expanded={profileEditing} aria-label={`Edit local profile for ${profileName}`} title="Edit local profile">
+	<button class="user-profile" type="button" onclick={toggleProfileEditor} aria-haspopup="dialog" aria-expanded={profileEditing} aria-label={email === null ? `Edit local profile for ${profileName}` : `${profileName}, ${email}`} title={email ?? "Edit local profile"}>
 		<img src={profileAvatar} alt="" />
-		<span>{profileName}</span>
+		<span class="user-identity">
+			<strong>{profileName}</strong>
+			{#if email !== null}<small>{email}</small>{/if}
+		</span>
 	</button>
 </div>
 
@@ -144,8 +154,8 @@
 		align-items: center;
 		gap: 0.375rem;
 		min-width: 0;
-		height: 2rem;
-		padding: 0 0.125rem;
+		min-height: 2rem;
+		padding: 0.2rem 0.125rem;
 		border: 0;
 		border-radius: var(--radius-md);
 		background: transparent;
@@ -171,13 +181,27 @@
 		object-fit: cover;
 	}
 
-	.user-profile span {
+	.user-identity {
+		display: grid;
+		min-width: 0;
+	}
+
+	.user-identity strong,
+	.user-identity small {
 		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.user-identity strong {
 		color: var(--color-foreground);
 		font-size: 0.65rem;
 		font-weight: 500;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	}
+
+	.user-identity small {
+		color: var(--color-muted-foreground);
+		font-size: 0.58rem;
 	}
 
 	.profile-editor {
@@ -208,7 +232,7 @@
 	.profile-editor p { margin: 0; color: var(--color-error); font-size: 0.62rem; }
 
 	@media (min-width: 768px) {
-		.compact .user-profile span { display: none; }
+		.compact .user-identity { display: none; }
 		.compact .user-profile {
 			justify-content: center;
 		}
