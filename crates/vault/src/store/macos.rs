@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{Read, Seek, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::Mutex;
 
+use super::lock;
 use crate::{Error, SERVICE, Stored};
 
 const ACCOUNT: &str = "credentials";
@@ -104,20 +104,6 @@ impl<B: Backend> CredentialStore<B> {
         }
         self.persist(&mut file, &credentials)
     }
-}
-
-fn lock(path: &Path) -> Result<File, Error> {
-    let parent = path.parent().ok_or(Error::InvalidStore)?;
-    std::fs::create_dir_all(parent)?;
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)?;
-    file.lock()?;
-    Ok(file)
 }
 
 fn advance_revision(file: &mut File) -> Result<[u8; 16], Error> {

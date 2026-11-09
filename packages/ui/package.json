@@ -25,6 +25,6 @@
     "@my-workspace/tsconfig": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "svelte": "5.57.3",
-    "svelte-check": "4.7.7"
+    "svelte-check": "4.7.8"
   }
 }

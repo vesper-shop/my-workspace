@@ -6,7 +6,11 @@ use serde::Serialize;
 use sysinfo::{Disks, Networks, System};
 
 const HISTORY_LIMIT: usize = 60;
-static MONITOR: LazyLock<Mutex<Monitor>> = LazyLock::new(|| Mutex::new(Monitor::new()));
+static MONITOR: LazyLock<Result<Mutex<Monitor>, String>> = LazyLock::new(|| {
+    Monitor::new()
+        .map(Mutex::new)
+        .map_err(|error| format!("Current-device monitor is unavailable: {error}"))
+});
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,18 +59,18 @@ struct Monitor {
 }
 
 impl Monitor {
-    fn new() -> Self {
-        let system = System::new_all();
+    fn new() -> Result<Self, sysinfo::Error> {
+        let system = System::new_all()?;
         std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-        Self {
+        Ok(Self {
             system,
-            disks: Disks::new_with_refreshed_list(),
-            networks: Networks::new_with_refreshed_list(),
+            disks: Disks::new_with_refreshed_list()?,
+            networks: Networks::new_with_refreshed_list()?,
             last_network_refresh: Instant::now(),
             cpu_history: VecDeque::new(),
             memory_history: VecDeque::new(),
             network_history: VecDeque::new(),
-        }
+        })
     }
 
     fn sample(&mut self) -> Result<Snapshot, String> {
@@ -145,6 +149,8 @@ fn push_sample<T>(history: &mut VecDeque<T>, sample: T) {
 pub(crate) async fn read() -> Result<Snapshot, String> {
     tokio::task::spawn_blocking(|| {
         MONITOR
+            .as_ref()
+            .map_err(Clone::clone)?
             .lock()
             .map_err(|error| format!("Current-device monitor state is unavailable: {error}"))?
             .sample()

@@ -73,6 +73,8 @@ pub async fn sign_in(authorization: Authorization) -> Result<Account, ApiError> 
         .error_for_status()?
         .json()
         .await?;
+    let mut access = ACCESS.lock().await;
+    let _lock = vault::lock(VAULT_ACCOUNT)?;
     vault::save_json(
         VAULT_ACCOUNT,
         &Session {
@@ -80,7 +82,7 @@ pub async fn sign_in(authorization: Authorization) -> Result<Account, ApiError> 
             account: account.clone(),
         },
     )?;
-    *ACCESS.lock().await = Some(Access {
+    *access = Some(Access {
         token: token.access_token,
         expires_at: Instant::now() + Duration::from_secs(token.expires_in),
     });
@@ -95,22 +97,29 @@ pub fn account() -> Result<Stored<Account>, ApiError> {
 }
 
 pub async fn sign_out() -> Result<(), ApiError> {
-    if let Stored::Ready(session) = vault::read_json::<Session>(VAULT_ACCOUNT)? {
-        reqwest::Client::builder()
-            .timeout(REQUEST_TIMEOUT)
-            .build()?
-            .post(REVOKE_ENDPOINT)
-            .form(&[
-                ("token", session.refresh_token.as_str()),
-                ("token_type_hint", "refresh_token"),
-                ("client_id", CLIENT_ID),
-            ])
-            .send()
-            .await?
-            .error_for_status()?;
-    }
-    vault::delete(VAULT_ACCOUNT)?;
-    *ACCESS.lock().await = None;
+    let stored = {
+        let mut access = ACCESS.lock().await;
+        let _lock = vault::lock(VAULT_ACCOUNT)?;
+        let stored = vault::read_json::<Session>(VAULT_ACCOUNT)?;
+        vault::delete(VAULT_ACCOUNT)?;
+        *access = None;
+        stored
+    };
+    let Stored::Ready(session) = stored else {
+        return Ok(());
+    };
+    reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()?
+        .post(REVOKE_ENDPOINT)
+        .form(&[
+            ("token", session.refresh_token.as_str()),
+            ("token_type_hint", "refresh_token"),
+            ("client_id", CLIENT_ID),
+        ])
+        .send()
+        .await?
+        .error_for_status()?;
     Ok(())
 }
 
@@ -122,17 +131,25 @@ pub(crate) async fn access_token() -> Result<String, ApiError> {
     {
         return Ok(current.token.clone());
     }
+    let _lock = vault::lock(VAULT_ACCOUNT)?;
     let Stored::Ready(session) = vault::read_json::<Session>(VAULT_ACCOUNT)? else {
         return Err(ApiError::SignedOut);
     };
-    let token = oauth::refresh(
+    let token = match oauth::refresh(
         CLIENT_ID,
         TOKEN_ENDPOINT,
         &session.refresh_token,
         &RESOURCES,
     )
     .await
-    .map_err(ApiError::Identity)?;
+    {
+        Ok(token) => token,
+        Err(oauth::Error::InvalidGrant) => {
+            vault::delete(VAULT_ACCOUNT)?;
+            return Err(ApiError::SignedOut);
+        }
+        Err(error) => return Err(ApiError::Identity(error)),
+    };
     if let Some(rotated) = token.refresh_token {
         vault::save_json(
             VAULT_ACCOUNT,

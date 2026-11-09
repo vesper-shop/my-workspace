@@ -46,6 +46,8 @@ pub enum Error {
     Request(#[source] reqwest::Error),
     #[error("OAuth provider returned {0}")]
     Status(reqwest::StatusCode),
+    #[error("OAuth grant is invalid, expired or revoked")]
+    InvalidGrant,
     #[error("OAuth provider returned invalid authorization data")]
     Protocol,
 }
@@ -188,8 +190,17 @@ fn token_error(
 ) -> Error {
     match error {
         oauth2::RequestTokenError::Request(error) => error,
-        // Parse and server errors can include credentials or arbitrary response bodies.
-        _ => Error::Protocol,
+        oauth2::RequestTokenError::ServerResponse(response)
+            if *response.error() == oauth2::basic::BasicErrorResponseType::InvalidGrant =>
+        {
+            Error::InvalidGrant
+        }
+        oauth2::RequestTokenError::ServerResponse(_) => {
+            Error::Status(reqwest::StatusCode::BAD_REQUEST)
+        }
+        oauth2::RequestTokenError::Parse(..) | oauth2::RequestTokenError::Other(_) => {
+            Error::Protocol
+        }
     }
 }
 
@@ -207,7 +218,7 @@ async fn send(request: oauth2::HttpRequest) -> Result<oauth2::HttpResponse, Erro
         .execute(request)
         .await
         .map_err(|error| Error::Request(error.without_url()))?;
-    if !response.status().is_success() {
+    if !response.status().is_success() && response.status() != reqwest::StatusCode::BAD_REQUEST {
         return Err(Error::Status(response.status()));
     }
     let mut result = oauth2::HttpResponse::new(Vec::new());

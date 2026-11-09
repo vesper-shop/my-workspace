@@ -48,6 +48,10 @@ pub enum Error {
     DevelopmentFile { path: std::path::PathBuf },
 }
 
+pub fn lock(account: &str) -> Result<std::fs::File, Error> {
+    store::lock(&database::directory()?.join(format!("{account}.lock")))
+}
+
 pub fn read_json<T: DeserializeOwned>(account: &str) -> Result<Stored<T>, Error> {
     match read(account)? {
         Stored::Ready(encoded) => Ok(Stored::Ready(serde_json::from_str(&encoded)?)),

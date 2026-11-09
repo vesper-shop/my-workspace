@@ -188,8 +188,10 @@ restoring invalidated content. Writes retain each consumer's server-side coordin
 The three consumer sites share one API shape. The browser and external clients call the same
 `/api/*` routes; there is no separate versioned surface. Vesper signs in once through the
 you-find.me OAuth gateway (client `workspace`, PKCE on `127.0.0.1:8793`) and sends one access token
-whose audience covers all three sites; each site verifies it against the gateway's JWKS, its own
-audience and write scope, and `ALLOWED_EMAIL`. Without a bearer token the owner session applies.
+whose audience covers all three sites; each site verifies the token against the gateway's JWKS, its
+own audience and write scope, and `ALLOWED_EMAIL`. Without a bearer token the owner session applies.
+The CLI and desktop share the stored session, so refresh-token rotation runs under a cross-process
+vault lock and a rejected grant clears the session.
 
 | Site                    | REST resources                                                     | Anonymous reads                                                                     |
 | ----------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |

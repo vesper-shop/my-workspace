@@ -150,8 +150,7 @@ impl Session for DatabaseSession {
         Box::pin(async move { Ok(self.data()?.peer_infos.get(&peer).cloned()) })
     }
 
-    fn cache_peer(&self, peer: &PeerInfo) -> BoxFuture<'_, Result<(), Self::Error>> {
-        let peer = peer.clone();
+    fn cache_peer(&self, peer: PeerInfo) -> BoxFuture<'_, Result<(), Self::Error>> {
         Box::pin(async move {
             self.update(|data| {
                 data.peer_infos

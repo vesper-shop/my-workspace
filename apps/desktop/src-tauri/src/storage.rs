@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn uses_startup_capacity_once() {
-        let disks = Disks::new_with_refreshed_list();
+        let disks = Disks::new_with_refreshed_list().expect("disk list");
         let startup = disks
             .iter()
             .find(|disk| disk.mount_point() == Path::new("/"))

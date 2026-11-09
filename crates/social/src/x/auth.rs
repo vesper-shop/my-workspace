@@ -86,6 +86,7 @@ fn oauth_error(error: oauth::Error) -> PublishError {
             status,
         },
         oauth::Error::Callback(message) => PublishError::XAuthorization(message),
+        oauth::Error::InvalidGrant => PublishError::XAuthorization("reconnect X"),
         oauth::Error::Request(_) => PublishError::Request("X authorization"),
         oauth::Error::Configuration | oauth::Error::Protocol => {
             PublishError::Protocol("X authorization")

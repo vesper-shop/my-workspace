@@ -187,3 +187,20 @@ async fn redacts_failed_token_responses() {
         request.await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn token_errors() {
+    for (body, expected) in [
+        (r#"{"error":"invalid_grant"}"#, "InvalidGrant"),
+        (r#"{"error":"invalid_client"}"#, "Status(400)"),
+        ("not json", "Protocol"),
+    ] {
+        let (endpoint, request) = token_server("400 Bad Request", body).await;
+        let error = refresh("client", &endpoint, "old", &[])
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(format!("{error:?}"), expected, "{body}");
+        request.await.unwrap();
+    }
+}
