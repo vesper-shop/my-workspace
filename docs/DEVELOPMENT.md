@@ -9,19 +9,14 @@ R2 access is needed for publication and optional for Moment, which otherwise rea
 
 ## Root commands
 
-| Command                     | Purpose                                                               |
-| --------------------------- | --------------------------------------------------------------------- |
-| `pnpm dev`                  | Run the desktop application.                                          |
-| `pnpm dev:cli`              | Run the CLI in development.                                           |
-| `pnpm build:desktop`        | Build the desktop deliverable.                                        |
-| `pnpm build:cli`            | Build the CLI deliverable.                                            |
-| `pnpm content:build`        | Compile local content into a disposable build.                        |
-| `pnpm content:publish`      | Preview the R2 upload plan.                                           |
-| `pnpm content:publish:live` | Upload the planned artifacts.                                         |
-| `pnpm format:check`         | Check frontend and Rust formatting.                                   |
-| `pnpm lint`                 | Run ESLint with Svelte/shadcn checks and Clippy with warnings denied. |
-| `pnpm check`                | Run formatting, lint, and type checks for both toolchains.            |
-| `pnpm test`                 | Run frontend and Cargo tests.                                         |
+| Command              | Purpose                                                               |
+| -------------------- | --------------------------------------------------------------------- |
+| `pnpm dev`           | Run the desktop application.                                          |
+| `pnpm build:desktop` | Build the desktop deliverable.                                        |
+| `pnpm format:check`  | Check frontend and Rust formatting.                                   |
+| `pnpm lint`          | Run ESLint with Svelte/shadcn checks and Clippy with warnings denied. |
+| `pnpm check`         | Run formatting, lint, and type checks for both toolchains.            |
+| `pnpm test`          | Run frontend and Cargo tests.                                         |
 
 Root pnpm scripts and `vp run <task>` are equivalent workspace entries. Root `check` combines
 `check:frontend` (formatting, whole-workspace ESLint, and each UI package's `typecheck`) and
@@ -29,24 +24,12 @@ Root pnpm scripts and `vp run <task>` are equivalent workspace entries. Root `ch
 Package `check` runs local formatting, lint, and types. `lint:fix:frontend` applies ESLint fixes;
 `precommit:fix` follows those fixes with frontend and Rust formatting. Scripts use Vite Plus's uncached default;
 Cargo retains its incremental build cache. Use `vp run lint` and `vp run check`, since built-in
-`vp lint` and `vp check` still invoke Oxlint. The binaries are `vesper` (CLI) and `vesper-desktop`.
+`vp lint` and `vp check` still invoke Oxlint. The binary is `vesper-desktop`.
 
 Only macOS installs an application menu; Windows and Linux windows have no native menu bar. The
 macOS View menu offers Reload and Developer Tools in debug and packaged builds. Reload preserves
 App Lock state. Tools require an unlocked session and close when locked; a restart starts unlocked.
 Set `RUST_LOG=debug` when investigating Rust behavior, without logging secrets or account responses.
-
-## CLI installation
-
-The CLI binary is `vesper`, distributed separately from the desktop installer and updater.
-`pnpm cli:install` builds and installs the release CLI into Cargo's binary directory (normally
-`~/.cargo/bin`, which must be on PATH). Rerun it to update; `pnpm cli:uninstall` removes the
-`vesper-cli` package.
-
-Installed CLI and packaged desktop share the release credential store. `pnpm dev:cli` and
-`content:*` run debug builds with the separate [debug credential boundary](#credential-resolution).
-The CLI owns terminal input and output; shared Rust crates own business rules, storage and provider
-access. Commands are documented by `vesper --help` and the [workflow guide](WORKFLOW.md).
 
 ## Desktop releases
 
@@ -114,7 +97,7 @@ remain outside Vesper; App Lock verification stays in Rust.
 
 Settings accepts bucket-scoped R2 credentials and separate Bearer keys generated in my-memos,
 my-moment, and my-knowledge. Memo and Knowledge use their APIs; direct R2 access cannot bypass
-server metadata and cache coordination. [Workflow](WORKFLOW.md) covers publication and recovery.
+server metadata and cache coordination.
 
 Chat requires a system installation of `@earendil-works/pi-coding-agent` with RPC support. Install
 and authenticate Pi outside this workspace; Vesper packages no Pi npm dependency. The current

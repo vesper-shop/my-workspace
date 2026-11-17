@@ -20,7 +20,6 @@ function deferred<T>() {
 }
 const original: MemoView = {
 	id: "memo",
-	r2Key: "memo.md",
 	content: "Original",
 	html: "Original",
 	tags: [],

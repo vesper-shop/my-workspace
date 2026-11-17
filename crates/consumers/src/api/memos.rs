@@ -1,10 +1,11 @@
 use super::{ApiError, Client, send};
+use futures_util::future::try_join_all;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-const ENDPOINT: &str = "https://memos.you-find.me/api";
-pub const PAGE_SIZE: usize = 25;
+const ENDPOINT: &str = "https://noted-this.date/api";
+pub const PAGE_SIZE: usize = 50;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,7 +35,6 @@ pub struct Update {
 #[serde(rename_all = "camelCase")]
 pub struct Memo {
     pub id: String,
-    pub r2_key: String,
     pub content: String,
     pub tags: Vec<String>,
     pub created_at: String,
@@ -72,15 +72,44 @@ pub struct ListFilters {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RemotePage {
-    memos: Vec<RemoteMemo>,
-    next_cursor: Option<String>,
+struct Meta {
+    id: String,
+    occurred: String,
+    visibility: Visibility,
+    pinned: Option<String>,
+    favorite: Option<String>,
+    archived: Option<String>,
+    tags: Vec<String>,
+    photos: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
-struct MemoResponse {
-    memo: RemoteMemo,
+struct Document {
+    meta: Meta,
+    body: String,
+}
+
+#[derive(Deserialize)]
+struct DocumentPage {
+    documents: Vec<Document>,
+    next: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SearchEntry {
+    id: String,
+    photos: Vec<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct SearchPage {
+    entries: Vec<SearchEntry>,
+    next: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Created {
+    id: String,
 }
 
 #[derive(Deserialize)]
@@ -129,102 +158,175 @@ pub struct TagCount {
     pub count: u64,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RemoteMemo {
-    id: String,
-    r2_key: String,
-    content: String,
-    tags: Vec<String>,
-    created_at: String,
-    updated_at: String,
-    visibility: Visibility,
-    pinned: bool,
-    favorite: bool,
-    archived: bool,
-}
-
-impl RemoteMemo {
+impl Document {
     fn into_view(self) -> MemoView {
-        let html = markdown::render_memo(&strip_tags(&self.content));
+        let Document { meta, body } = self;
+        let content = with_tags(&body, &meta.tags);
         MemoView {
             metadata_complete: true,
+            html: markdown::render_memo(&strip_tags(&content)),
             memo: Memo {
-                id: self.id,
-                r2_key: self.r2_key,
-                content: self.content,
-                tags: self.tags,
-                created_at: self.created_at,
-                updated_at: self.updated_at,
-                visibility: self.visibility,
-                pinned: self.pinned,
-                favorite: self.favorite,
-                archived: self.archived,
+                id: meta.id,
+                content,
+                tags: meta.tags,
+                created_at: meta.occurred.clone(),
+                updated_at: meta.occurred,
+                visibility: meta.visibility,
+                pinned: meta.pinned.is_some(),
+                favorite: meta.favorite.is_some(),
+                archived: meta.archived.is_some(),
             },
-            html,
         }
     }
 }
 
-pub async fn list(cursor: Option<String>, filters: &ListFilters) -> Result<Page, ApiError> {
-    let client = Client::load().await?;
-    let limit = filters.limit.unwrap_or(PAGE_SIZE).to_string();
-    let mut request = client
-        .http
-        .get(format!("{ENDPOINT}/memos"))
-        .bearer_auth(&client.token)
-        .query(&[("limit", limit)]);
-    if let Some(cursor) = cursor.as_deref() {
-        request = request.query(&[("cursor", cursor)]);
+fn with_tags(body: &str, tags: &[String]) -> String {
+    if tags.is_empty() {
+        return body.trim_end().to_owned();
     }
-    if let Some(search) = filters
-        .search
-        .as_deref()
-        .filter(|search| !search.is_empty())
-    {
-        request = request.query(&[("search", search)]);
+    let line = tags
+        .iter()
+        .map(|tag| format!("#{tag}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("{}\n\n{line}", body.trim_end())
+}
+
+fn body_of(content: &str) -> String {
+    let mut lines: Vec<&str> = content.trim_end().lines().collect();
+    while lines.last().is_some_and(|line| {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        !words.is_empty() && words.iter().all(|word| is_hashtag(word))
+    }) {
+        lines.pop();
     }
-    if !filters.tags.is_empty() {
-        request = request.query(&[("tags", filters.tags.join(","))]);
-    }
-    if filters.sort_by_updated {
-        request = request.query(&[("sortByUpdated", "true")]);
-    }
-    if filters.archived_only {
-        request = request.query(&[("archivedOnly", "true")]);
-    }
-    if filters.favorites_only {
-        request = request.query(&[("favoritesOnly", "true")]);
-    }
-    let response = send(request, "list memos").await?;
-    let page: RemotePage = response.json().await?;
-    let memos = page.memos.into_iter().map(RemoteMemo::into_view).collect();
-    Ok(Page {
-        memos,
-        next_cursor: page.next_cursor,
+    lines.join("\n").trim_end().to_owned()
+}
+
+fn is_hashtag(word: &str) -> bool {
+    word.strip_prefix('#').is_some_and(|name| {
+        !name.is_empty() && !name.starts_with('#') && name.chars().all(is_tag_character)
     })
 }
 
-/// Build the memo detail URL, percent-encoding the ID instead of splicing it.
-fn build_url(id: &str) -> Result<reqwest::Url, ApiError> {
+pub fn extract_tags(content: &str) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    for word in content.split_whitespace() {
+        if is_hashtag(word) {
+            let tag = word[1..].to_lowercase();
+            if !tags.contains(&tag) {
+                tags.push(tag);
+            }
+        }
+    }
+    tags
+}
+
+fn entry_url(id: &str) -> Result<reqwest::Url, ApiError> {
     if id.trim().is_empty() {
         return Err(ApiError::Protocol("a memo ID is required".to_owned()));
     }
-    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/memos/"))
-        .map_err(|_| ApiError::Protocol("the Memos endpoint is invalid".to_owned()))?;
+    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/entries/"))
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
     url.path_segments_mut()
-        .map_err(|_| ApiError::Protocol("the Memos endpoint cannot contain a memo ID".to_owned()))?
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
         .pop_if_empty()
         .push(id);
     Ok(url)
 }
 
-pub async fn read(id: &str) -> Result<MemoView, ApiError> {
-    let url = build_url(id)?;
+fn shelf(filters: &ListFilters) -> &'static str {
+    if filters.archived_only {
+        "archive"
+    } else if filters.favorites_only {
+        "favorites"
+    } else {
+        "all"
+    }
+}
+
+pub async fn list(cursor: Option<String>, filters: &ListFilters) -> Result<Page, ApiError> {
     let client = Client::load().await?;
-    let response = send(client.http.get(url).bearer_auth(&client.token), "read memo").await?;
-    let result: MemoResponse = response.json().await?;
-    Ok(result.memo.into_view())
+    let mut query = vec![("in", shelf(filters).to_owned())];
+    if let [tag] = filters.tags.as_slice() {
+        query.push(("tag", tag.clone()));
+    }
+    if let Some(before) = cursor {
+        query.push(("before", before));
+    }
+    let search = filters
+        .search
+        .as_deref()
+        .filter(|search| !search.is_empty());
+    let (documents, next) = match search {
+        Some(search) => {
+            query.push(("q", search.to_owned()));
+            let response = send(
+                client
+                    .http
+                    .get(format!("{ENDPOINT}/entries"))
+                    .bearer_auth(&client.token)
+                    .query(&query),
+                "search memos",
+            )
+            .await?;
+            let page: SearchPage = response.json().await?;
+            let ids: Vec<String> = page
+                .entries
+                .into_iter()
+                .filter(|entry| entry.photos.is_empty())
+                .map(|entry| entry.id)
+                .collect();
+            let documents = try_join_all(ids.iter().map(|id| fetch(&client, id))).await?;
+            (documents, page.next)
+        }
+        None => {
+            let response = send(
+                client
+                    .http
+                    .get(format!("{ENDPOINT}/entries/documents"))
+                    .bearer_auth(&client.token)
+                    .query(&query),
+                "list memos",
+            )
+            .await?;
+            let page: DocumentPage = response.json().await?;
+            (page.documents, page.next)
+        }
+    };
+    let memos = documents
+        .into_iter()
+        .filter(|document| document.meta.photos.is_empty())
+        .filter(|document| {
+            filters.tags.len() < 2
+                || filters.tags.iter().any(|tag| {
+                    document
+                        .meta
+                        .tags
+                        .iter()
+                        .any(|own| own.eq_ignore_ascii_case(tag))
+                })
+        })
+        .map(Document::into_view)
+        .collect();
+    Ok(Page {
+        memos,
+        next_cursor: next,
+    })
+}
+
+async fn fetch(client: &Client, id: &str) -> Result<Document, ApiError> {
+    let response = send(
+        client.http.get(entry_url(id)?).bearer_auth(&client.token),
+        "read memo",
+    )
+    .await?;
+    Ok(response.json().await?)
+}
+
+pub async fn read(id: &str) -> Result<MemoView, ApiError> {
+    let client = Client::load().await?;
+    Ok(fetch(&client, id).await?.into_view())
 }
 
 pub async fn tags() -> Result<Vec<TagCount>, ApiError> {
@@ -254,11 +356,11 @@ async fn submit(
     let response = send(
         client
             .http
-            .post(format!("{ENDPOINT}/memos"))
+            .post(format!("{ENDPOINT}/entries"))
             .bearer_auth(&client.token)
             .json(&json!({
-                "content": content,
-                "tags": [],
+                "body": body_of(content),
+                "tags": extract_tags(content),
                 "visibility": visibility,
                 "favorite": favorite
             })),
@@ -271,8 +373,8 @@ async fn submit(
             status: response.status(),
         });
     }
-    let result: MemoResponse = response.json().await?;
-    Ok(result.memo.into_view())
+    let created: Created = response.json().await?;
+    Ok(fetch(&client, &created.id).await?.into_view())
 }
 
 pub async fn import_x(source_url: &str, visibility: Visibility) -> Result<MemoView, ApiError> {
@@ -293,39 +395,41 @@ pub async fn import_x(source_url: &str, visibility: Visibility) -> Result<MemoVi
 }
 
 pub async fn update(id: &str, input: &Update) -> Result<MemoView, ApiError> {
-    let url = build_url(id)?;
+    let url = entry_url(id)?;
     let client = Client::load().await?;
-    let response = send(
+    let tags = match (&input.content, &input.tags) {
+        (_, Some(tags)) if !tags.is_empty() => Some(tags.clone()),
+        (Some(content), _) => Some(extract_tags(content)),
+        (None, tags) => tags.clone(),
+    };
+    send(
         client
             .http
             .patch(url)
             .bearer_auth(&client.token)
-            .json(input),
+            .json(&json!({
+                "body": input.content.as_deref().map(body_of),
+                "tags": tags,
+                "visibility": input.visibility,
+                "pinned": input.pinned,
+                "favorite": input.favorite,
+                "archived": input.archived
+            })),
         "update memo",
     )
     .await?;
-    let result: MemoResponse = response.json().await?;
-    Ok(result.memo.into_view())
+    Ok(fetch(&client, id).await?.into_view())
 }
 
 pub async fn delete(id: &str) -> Result<(), ApiError> {
-    let url = build_url(id)?;
+    let url = entry_url(id)?;
     let client = Client::load().await?;
-    let response = client
-        .http
-        .delete(url)
-        .bearer_auth(&client.token)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .send()
-        .await?;
-    if response.status() == StatusCode::NO_CONTENT {
-        Ok(())
-    } else {
-        Err(ApiError::Status {
-            operation: "delete memo",
-            status: response.status(),
-        })
-    }
+    send(
+        client.http.delete(url).bearer_auth(&client.token),
+        "delete memo",
+    )
+    .await?;
+    Ok(())
 }
 
 pub fn strip_tags(content: &str) -> String {
@@ -496,13 +600,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encodes_memo_ids() {
-        assert_eq!(build_url("item").unwrap().path(), "/api/memos/item");
+    fn encodes_entry_ids() {
+        assert_eq!(entry_url("item").unwrap().path(), "/api/entries/item");
         assert_eq!(
-            build_url("../settings").unwrap().path(),
-            "/api/memos/..%2Fsettings"
+            entry_url("../settings").unwrap().path(),
+            "/api/entries/..%2Fsettings"
         );
-        assert_eq!(build_url("a b").unwrap().path(), "/api/memos/a%20b");
+        assert_eq!(entry_url("a b").unwrap().path(), "/api/entries/a%20b");
     }
 
     #[tokio::test]
@@ -529,25 +633,36 @@ mod tests {
     }
 
     #[test]
-    fn projects_list_body() {
-        let view = RemoteMemo {
-            id: "memo".to_owned(),
-            r2_key: "memos/memo.md".to_owned(),
-            content: "Complete API body".to_owned(),
-            tags: Vec::new(),
-            created_at: "2026-08-25T00:00:00.000Z".to_owned(),
-            updated_at: "2026-08-25T00:00:00.000Z".to_owned(),
-            visibility: Visibility::Private,
-            pinned: false,
-            favorite: false,
-            archived: false,
-        }
-        .into_view();
-
-        assert_eq!(view.memo.content, "Complete API body");
+    fn projects_entry_into_memo() {
+        let document: Document = serde_json::from_value(serde_json::json!({
+            "meta": {
+                "id": "entry",
+                "occurred": "2026-08-25T00:00:00.000Z",
+                "visibility": "private",
+                "pinned": null,
+                "favorite": "2026-08-26T00:00:00.000Z",
+                "archived": null,
+                "tags": ["rust"],
+                "photos": []
+            },
+            "body": "Complete API body"
+        }))
+        .unwrap();
+        let view = document.into_view();
+        assert_eq!(view.memo.content, "Complete API body\n\n#rust");
+        assert!(view.memo.favorite && !view.memo.pinned);
         assert!(view.html.contains("Complete API body"));
-        let response = serde_json::to_value(&view).unwrap();
-        assert_eq!(response["metadataComplete"], true);
+        assert_eq!(
+            serde_json::to_value(&view).unwrap()["metadataComplete"],
+            true
+        );
+    }
+
+    #[test]
+    fn separates_body_and_tags() {
+        let content = "Line #inline\n\n#daily #rust";
+        assert_eq!(body_of(content), "Line #inline");
+        assert_eq!(extract_tags(content), ["inline", "daily", "rust"]);
     }
 
     #[test]

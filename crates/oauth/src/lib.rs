@@ -26,9 +26,9 @@ macro_rules! callback_page {
 }
 
 const SUCCESS_PAGE: &str = callback_page!(
-    "<meta http-equiv=\"refresh\" content=\"0;url=vesper://\">",
+    "<meta http-equiv=\"refresh\" content=\"0;url=vesper://\"><style>main a{display:inline-block;margin-top:1rem;padding:.45rem .9rem;border-radius:.4rem;background:#18181b;color:#fafafa;font-size:.85rem;text-decoration:none}@media (prefers-color-scheme:dark){main a{background:#fafafa;color:#18181b}}</style>",
     "Authorization complete",
-    "Vesper is signed in. You can close this page."
+    "Vesper is signed in. <a href=\"vesper://\">Open Vesper</a> if it does not come forward. You can close this page."
 );
 const FAILURE_PAGE: &str = callback_page!(
     "",

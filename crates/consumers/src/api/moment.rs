@@ -1,14 +1,16 @@
 use super::{ApiError, Client, send};
-use cms::r2::Store;
-use reqwest::StatusCode;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 mod exif;
 mod media;
 
 pub(super) use media::Error as MediaError;
 
-const ENDPOINT: &str = "https://moment.you-find.me/api";
+const ENDPOINT: &str = "https://noted-this.date/api";
+pub const KEY_PREFIX: &str = "img/vesper/";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Geo {
@@ -42,6 +44,7 @@ pub async fn read_metadata(source: Vec<u8>) -> Result<PhotoMetadata, ApiError> {
 #[serde(rename_all = "camelCase")]
 pub struct Photo {
     pub id: String,
+    pub entry_id: String,
     pub url: String,
     pub thumbnail_url: String,
     pub r2_key: String,
@@ -54,8 +57,6 @@ pub struct Photo {
     pub tags: Vec<String>,
     pub date: Option<String>,
     pub description: Option<String>,
-    pub size: Option<i64>,
-    pub format: Option<String>,
     pub geo: Option<Geo>,
 }
 
@@ -64,29 +65,6 @@ pub struct Photo {
 pub struct Page {
     pub photos: Vec<Photo>,
     pub total: usize,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Create {
-    pub r2_key: String,
-    pub thumbnail_r2_key: String,
-    pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    pub tags: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub geo: Option<Geo>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thumb_hash: Option<String>,
-    pub width: u32,
-    pub height: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub aspect_ratio: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<String>,
 }
 
 pub enum MetadataPolicy {
@@ -178,13 +156,24 @@ where
 }
 
 #[derive(Deserialize)]
-struct PhotoList {
-    photos: Vec<Photo>,
+#[serde(rename_all = "camelCase")]
+struct RemotePhoto {
+    id: String,
+    width: u32,
+    height: u32,
+    taken_at: Option<i64>,
+    geo: Option<Geo>,
+    entry_id: String,
+    caption: String,
+    tags: Vec<String>,
+    occurred_at: i64,
+    thumb_hash: String,
 }
 
 #[derive(Deserialize)]
-struct PhotoResponse {
-    photo: Photo,
+struct RemotePage {
+    photos: Vec<RemotePhoto>,
+    next: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -198,128 +187,125 @@ struct TagCount {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PhotoQuery {
-    pub from_date: Option<String>,
-    pub to_date: Option<String>,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    pub search: Option<String>,
-    pub limit: Option<usize>,
+struct Created {
+    id: String,
 }
 
-pub async fn query(input: &PhotoQuery) -> Result<Vec<Photo>, ApiError> {
-    if input.limit.is_some_and(|limit| !(1..=100).contains(&limit)) {
-        return Err(ApiError::Protocol(
-            "photo limit must be between 1 and 100".to_owned(),
-        ));
-    }
-    if input
-        .search
-        .as_ref()
-        .is_some_and(|query| query.trim().is_empty())
-    {
-        return Err(ApiError::Protocol(
-            "photo search cannot be empty".to_owned(),
-        ));
-    }
-    let has_filters =
-        input.from_date.is_some() || input.to_date.is_some() || !input.tags.is_empty();
-    if input.search.is_some() && has_filters {
-        return Err(ApiError::Protocol(
-            "photo search cannot be combined with date or tag filters".to_owned(),
-        ));
-    }
-    let date_format = time::macros::format_description!("[year]-[month]-[day]");
-    for date in [&input.from_date, &input.to_date].into_iter().flatten() {
-        time::Date::parse(date, &date_format)
-            .map_err(|_| ApiError::Protocol("photo dates must use YYYY-MM-DD".to_owned()))?;
-    }
-    if let (Some(from), Some(to)) = (&input.from_date, &input.to_date)
-        && from > to
-    {
-        return Err(ApiError::Protocol(
-            "photo fromDate must not follow toDate".to_owned(),
-        ));
-    }
-    if input
-        .tags
-        .iter()
-        .any(|tag| tag.trim().is_empty() || tag.contains(','))
-    {
-        return Err(ApiError::Protocol(
-            "photo tags must be non-empty and contain no commas".to_owned(),
-        ));
-    }
-    let client = Client::load().await?;
-    let mut request = client
-        .http
-        .get(format!("{ENDPOINT}/photos"))
-        .bearer_auth(&client.token);
-    if let Some(limit) = input.limit {
-        request = request.query(&[("limit", limit)]);
-    }
-    if let Some(from) = &input.from_date {
-        request = request.query(&[("fromDate", from)]);
-    }
-    if let Some(to) = &input.to_date {
-        request = request.query(&[("toDate", to)]);
-    }
-    if let Some(search) = &input.search {
-        request = request.query(&[("search", search)]);
-    }
-    if !input.tags.is_empty() {
-        request = request.query(&[("tags", input.tags.join(","))]);
-    }
-    let response = send(request, "query photos").await?;
-    let result: PhotoList = response.json().await?;
-    Ok(result.photos)
+#[derive(Deserialize)]
+struct EntryPhotos {
+    photos: Vec<EntryPhoto>,
 }
 
-/// Build the photo detail URL, percent-encoding the ID instead of splicing it.
-fn build_url(id: &str) -> Result<reqwest::Url, ApiError> {
+#[derive(Deserialize)]
+struct EntryPhoto {
+    id: String,
+}
+
+fn iso(milliseconds: i64) -> Option<String> {
+    let time =
+        time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(milliseconds) * 1_000_000)
+            .ok()?;
+    time.format(&time::format_description::well_known::Rfc3339)
+        .ok()
+}
+
+fn milliseconds(value: &str) -> Option<i64> {
+    let time =
+        time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok()?;
+    i64::try_from(time.unix_timestamp_nanos() / 1_000_000).ok()
+}
+
+fn split_caption(caption: &str) -> (String, Option<String>) {
+    match caption.split_once("\n\n") {
+        Some((title, rest)) if !rest.trim().is_empty() => (title.to_owned(), Some(rest.to_owned())),
+        Some((title, _)) => (title.to_owned(), None),
+        None => (caption.to_owned(), None),
+    }
+}
+
+fn caption(title: &str, description: Option<&str>) -> String {
+    match description.map(str::trim).filter(|text| !text.is_empty()) {
+        Some(description) => format!("{}\n\n{description}", title.trim()),
+        None => title.trim().to_owned(),
+    }
+}
+
+/// Vesper sends thumb hashes as base64url; the desktop decodes hex.
+fn hex_thumb_hash(value: &str) -> Option<String> {
+    URL_SAFE_NO_PAD.decode(value).ok().map(hex::encode)
+}
+
+impl RemotePhoto {
+    fn into_photo(self) -> Photo {
+        let (title, description) = split_caption(&self.caption);
+        Photo {
+            url: format!("{ENDPOINT}/photos/{}?size=original", self.id),
+            thumbnail_url: format!("{ENDPOINT}/photos/{}?size=thumb", self.id),
+            r2_key: format!("{KEY_PREFIX}{}.jpg", self.id),
+            thumbnail_r2_key: format!("{KEY_PREFIX}{}.thumb.jpg", self.id),
+            thumb_hash: hex_thumb_hash(&self.thumb_hash),
+            aspect_ratio: Some(f64::from(self.width) / f64::from(self.height)),
+            date: iso(self.taken_at.unwrap_or(self.occurred_at)),
+            id: self.id,
+            entry_id: self.entry_id,
+            title,
+            description,
+            width: self.width,
+            height: self.height,
+            tags: self.tags,
+            geo: self.geo,
+        }
+    }
+}
+
+fn entry_url(id: &str) -> Result<reqwest::Url, ApiError> {
     if id.trim().is_empty() {
         return Err(ApiError::Protocol("a photo ID is required".to_owned()));
     }
-    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/photos/"))
-        .map_err(|_| ApiError::Protocol("the Moment endpoint is invalid".to_owned()))?;
+    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/entries/"))
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
     url.path_segments_mut()
-        .map_err(|_| {
-            ApiError::Protocol("the Moment endpoint cannot contain a photo ID".to_owned())
-        })?
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
         .pop_if_empty()
         .push(id);
     Ok(url)
 }
 
-pub async fn get(id: &str) -> Result<Photo, ApiError> {
-    let url = build_url(id)?;
-    let client = Client::load().await?;
-    let response = send(
-        client.http.get(url).bearer_auth(&client.token),
-        "read photo",
-    )
-    .await?;
-    let result: PhotoResponse = response.json().await?;
-    Ok(result.photo)
-}
-
 pub async fn list() -> Result<Page, ApiError> {
     let client = Client::load().await?;
-    let response = send(
-        client
+    let mut photos = Vec::new();
+    let mut before: Option<String> = None;
+    loop {
+        let mut request = client
             .http
             .get(format!("{ENDPOINT}/photos"))
-            .bearer_auth(&client.token)
-            .query(&[("limit", "100")]),
-        "list photos",
-    )
-    .await?;
-    let result: PhotoList = response.json().await?;
+            .bearer_auth(&client.token);
+        if let Some(cursor) = &before {
+            request = request.query(&[("before", cursor)]);
+        }
+        let page: RemotePage = send(request, "list photos").await?.json().await?;
+        photos.extend(page.photos.into_iter().map(RemotePhoto::into_photo));
+        match page.next {
+            Some(next) => before = Some(next),
+            None => break,
+        }
+    }
     Ok(Page {
-        total: result.photos.len(),
-        photos: result.photos,
+        total: photos.len(),
+        photos,
     })
+}
+
+pub async fn get(id: &str) -> Result<Photo, ApiError> {
+    if id.trim().is_empty() {
+        return Err(ApiError::Protocol("a photo ID is required".to_owned()));
+    }
+    list()
+        .await?
+        .photos
+        .into_iter()
+        .find(|photo| photo.id == id)
+        .ok_or_else(|| ApiError::Protocol(format!("photo {id} was not found")))
 }
 
 pub async fn tags() -> Result<Vec<String>, ApiError> {
@@ -336,29 +322,7 @@ pub async fn tags() -> Result<Vec<String>, ApiError> {
     Ok(result.tags.into_iter().map(|tag| tag.name).collect())
 }
 
-pub async fn create(input: &Create) -> Result<Photo, ApiError> {
-    let client = Client::load().await?;
-    let response = send(
-        client
-            .http
-            .post(format!("{ENDPOINT}/photos"))
-            .bearer_auth(&client.token)
-            .json(input),
-        "create photo",
-    )
-    .await?;
-    if response.status() != StatusCode::CREATED {
-        return Err(ApiError::Status {
-            operation: "create photo",
-            status: response.status(),
-        });
-    }
-    let result: PhotoResponse = response.json().await?;
-    Ok(result.photo)
-}
-
 pub async fn upload(
-    store: Option<&Store>,
     mut input: Upload,
     source: Vec<u8>,
     metadata_policy: MetadataPolicy,
@@ -371,190 +335,189 @@ pub async fn upload(
     input.apply_metadata(prepared.metadata, metadata_policy);
     let tags = input
         .tags
-        .into_iter()
+        .iter()
         .map(|tag| tag.trim().to_lowercase())
         .collect::<Vec<_>>();
-    let aspect_ratio = f64::from(prepared.width) / f64::from(prepared.height);
-    let Some(store) = store else {
-        let mut form = reqwest::multipart::Form::new()
-            .part(
-                "file",
-                reqwest::multipart::Part::bytes(prepared.original)
-                    .file_name("photo.png")
-                    .mime_str("image/png")?,
-            )
-            .part(
-                "thumbnail",
-                reqwest::multipart::Part::bytes(prepared.thumbnail)
-                    .file_name("thumbnail.jpg")
-                    .mime_str("image/jpeg")?,
-            )
-            .text("title", input.title)
-            .text("tags", serde_json::json!(tags).to_string())
-            .text("thumbHash", prepared.thumb_hash)
-            .text("width", prepared.width.to_string())
-            .text("height", prepared.height.to_string())
-            .text("aspectRatio", aspect_ratio.to_string());
-        if let Some(description) = input.description {
-            form = form.text("description", description);
-        }
-        if let Some(date) = input.date {
-            form = form.text("date", date);
-        }
-        if let Some(geo) = input.geo {
-            form = form.text("geo", serde_json::json!(geo).to_string());
-        }
-        let client = Client::load().await?;
-        let response = send(
-            client
-                .http
-                .post(format!("{ENDPOINT}/photos/upload"))
-                .bearer_auth(&client.token)
-                .multipart(form),
-            "upload photo",
-        )
-        .await?;
-        return Ok(response.json().await?);
-    };
-    let id = uuid::Uuid::new_v4();
-    let r2_key = format!("img/{id}.png");
-    let thumbnail_r2_key = format!("img/thumbnails/{id}.jpg");
-    store.put(&r2_key, prepared.original, "image/png").await?;
-    if let Err(error) = store
-        .put(&thumbnail_r2_key, prepared.thumbnail, "image/jpeg")
-        .await
-    {
-        return match store.delete(&r2_key).await {
-            Ok(()) => Err(error.into()),
-            Err(cleanup) => Err(ApiError::Protocol(format!(
-                "thumbnail upload failed: {error}; original cleanup failed: {cleanup}"
-            ))),
-        };
+    let digest = hex::encode(Sha256::digest(&prepared.original));
+    let client = Client::load().await?;
+    send(
+        client
+            .http
+            .put(format!("{ENDPOINT}/photos"))
+            .bearer_auth(&client.token)
+            .header(reqwest::header::CONTENT_TYPE, "image/png")
+            .header("x-content-sha256", &digest)
+            .body(prepared.original),
+        "upload photo original",
+    )
+    .await?;
+    let taken_at = input.date.as_deref().and_then(milliseconds);
+    let thumb_hash = hex::decode(&prepared.thumb_hash)
+        .map(|bytes| URL_SAFE_NO_PAD.encode(bytes))
+        .map_err(|_| ApiError::Protocol("the photo thumb hash is invalid".to_owned()))?;
+    let mut entry = serde_json::json!({
+        "body": caption(&input.title, input.description.as_deref()),
+        "tags": tags,
+        "visibility": "public",
+    });
+    if let Some(taken_at) = taken_at {
+        entry["occurredAt"] = serde_json::json!(taken_at);
     }
-    let metadata = Create {
-        r2_key: r2_key.clone(),
-        thumbnail_r2_key: thumbnail_r2_key.clone(),
-        title: input.title,
-        description: input.description,
-        tags,
-        date: input.date,
-        geo: input.geo,
-        thumb_hash: Some(prepared.thumb_hash),
-        width: prepared.width,
-        height: prepared.height,
-        aspect_ratio: Some(aspect_ratio),
-        format: Some("PNG".to_owned()),
-    };
-    create(&metadata).await.map_err(|error| {
-        ApiError::Protocol(format!(
-            "photo registration could not be confirmed: {error}; retained objects {r2_key} and {thumbnail_r2_key}; check the gallery before retrying or removing these objects"
-        ))
-    })
+    let meta = serde_json::json!({
+        "width": prepared.width,
+        "height": prepared.height,
+        "thumbHash": thumb_hash,
+        "takenAt": taken_at,
+        "geo": input.geo,
+        "place": null,
+        "exif": {
+            "camera": null, "lens": null, "focalLength": null, "fNumber": null,
+            "exposure": null, "iso": null, "film": null
+        }
+    });
+    let form = reqwest::multipart::Form::new()
+        .text("entry", entry.to_string())
+        .text("digest", digest)
+        .part(
+            "thumb",
+            reqwest::multipart::Part::bytes(prepared.thumbnail)
+                .file_name("thumb.jpg")
+                .mime_str("image/jpeg")?,
+        )
+        .text("mime", "image/png")
+        .text("meta", meta.to_string());
+    let created: Created = send(
+        client
+            .http
+            .post(format!("{ENDPOINT}/entries"))
+            .bearer_auth(&client.token)
+            .multipart(form),
+        "create photo entry",
+    )
+    .await?
+    .json()
+    .await?;
+    let entry: EntryPhotos = send(
+        client
+            .http
+            .get(entry_url(&created.id)?)
+            .bearer_auth(&client.token),
+        "read photo entry",
+    )
+    .await?
+    .json()
+    .await?;
+    let photo = entry
+        .photos
+        .first()
+        .ok_or_else(|| ApiError::Protocol("the new entry has no photo".to_owned()))?;
+    get(&photo.id).await
 }
 
 pub async fn image(key: &str) -> Result<Vec<u8>, ApiError> {
+    let name = key
+        .strip_prefix(KEY_PREFIX)
+        .ok_or_else(|| ApiError::Protocol("not a Vesper photo key".to_owned()))?;
+    let (id, size) = match name.strip_suffix(".thumb.jpg") {
+        Some(id) => (id, "thumb"),
+        None => (
+            name.strip_suffix(".jpg")
+                .ok_or_else(|| ApiError::Protocol("not a Vesper photo key".to_owned()))?,
+            "original",
+        ),
+    };
+    let client = Client::load().await?;
+    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/photos/"))
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
+    url.path_segments_mut()
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
+        .pop_if_empty()
+        .push(id);
+    url.query_pairs_mut().append_pair("size", size);
     let response = send(
-        reqwest::Client::builder()
-            .timeout(super::REQUEST_TIMEOUT)
-            .user_agent(concat!("Vesper/", env!("CARGO_PKG_VERSION"), " consumers"))
-            .build()?
-            .get(format!("{ENDPOINT}/photos/{key}")),
+        client.http.get(url).bearer_auth(&client.token),
         "read photo image",
     )
     .await?;
     Ok(response.bytes().await?.to_vec())
 }
 
+/// Vesper keeps the taken time and place that came with the photo.
 pub async fn update(id: &str, input: &Update) -> Result<Photo, ApiError> {
-    let url = build_url(id)?;
+    if input.date.is_some() || input.geo.is_some() {
+        return Err(ApiError::Protocol(
+            "Vesper keeps a photo's date and place from the upload; edit them in Vesper".to_owned(),
+        ));
+    }
+    let photo = get(id).await?;
     let client = Client::load().await?;
-    let response = send(
+    let body = (input.title.is_some() || input.description.is_some()).then(|| {
+        caption(
+            input.title.as_deref().unwrap_or(&photo.title),
+            input
+                .description
+                .as_deref()
+                .or(photo.description.as_deref()),
+        )
+    });
+    let tags = input.tags.as_ref().map(|tags| {
+        tags.iter()
+            .map(|tag| tag.trim().to_lowercase())
+            .collect::<Vec<_>>()
+    });
+    send(
         client
             .http
-            .patch(url)
+            .patch(entry_url(&photo.entry_id)?)
             .bearer_auth(&client.token)
-            .json(input),
+            .json(&serde_json::json!({ "body": body, "tags": tags })),
         "update photo",
     )
     .await?;
-    let result: PhotoResponse = response.json().await?;
-    Ok(result.photo)
+    get(id).await
 }
 
 pub async fn delete(id: &str) -> Result<(), ApiError> {
-    let url = build_url(id)?;
+    let photo = get(id).await?;
     let client = Client::load().await?;
-    let response = client
-        .http
-        .delete(url)
-        .bearer_auth(&client.token)
-        .send()
-        .await?;
-    if response.status() == StatusCode::NO_CONTENT {
-        Ok(())
-    } else {
-        Err(ApiError::Status {
-            operation: "delete photo",
-            status: response.status(),
-        })
-    }
+    send(
+        client
+            .http
+            .delete(entry_url(&photo.entry_id)?)
+            .bearer_auth(&client.token),
+        "delete photo",
+    )
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Photo, Update, Upload};
+    use super::{Update, Upload};
 
     #[test]
-    fn encodes_photo_ids() {
-        assert_eq!(super::build_url("item").unwrap().path(), "/api/photos/item");
+    fn splits_and_joins_captions() {
         assert_eq!(
-            super::build_url("../settings").unwrap().path(),
-            "/api/photos/..%2Fsettings"
+            super::split_caption("Title\n\nMore\n\nText"),
+            ("Title".to_owned(), Some("More\n\nText".to_owned()))
         );
+        assert_eq!(super::split_caption("Title"), ("Title".to_owned(), None));
+        assert_eq!(super::caption("Title", Some("More")), "Title\n\nMore");
+        assert_eq!(super::caption("Title", Some("  ")), "Title");
+    }
+
+    #[test]
+    fn converts_thumb_hashes() {
+        assert_eq!(super::hex_thumb_hash("AQID").as_deref(), Some("010203"));
     }
 
     #[tokio::test]
-    async fn rejects_blank_photo_ids() {
-        for id in ["", "   "] {
-            assert!(
-                matches!(
-                    super::update(id, &Update::default()).await,
-                    Err(super::ApiError::Protocol(_))
-                ),
-                "{id}"
-            );
-            assert!(
-                matches!(super::delete(id).await, Err(super::ApiError::Protocol(_))),
-                "{id}"
-            );
-        }
-    }
-
-    #[test]
-    fn decodes_photo() {
-        let photo: Photo = serde_json::from_value(serde_json::json!({
-            "id": "photo-id",
-            "url": "/api/photos/img/photo.jpg",
-            "thumbnailUrl": "/api/photos/img/thumbnails/photo.webp",
-            "r2Key": "img/photo.jpg",
-            "thumbnailR2Key": "img/thumbnails/photo.webp",
-            "thumbHash": "hash",
-            "title": "Photo",
-            "width": 1600,
-            "height": 900,
-            "aspectRatio": 1.7777777778,
-            "tags": ["travel"],
-            "date": "2026-08-23T00:00:00.000Z",
-            "description": "Description",
-            "size": 1024,
-            "format": "JPG",
-            "geo": { "lat": 31.2304, "lng": 121.4737 }
-        }))
-        .expect("photo response should match the REST contract");
-
-        assert_eq!(photo.r2_key, "img/photo.jpg");
-        assert_eq!(photo.thumbnail_r2_key, "img/thumbnails/photo.webp");
-        assert_eq!(photo.tags, ["travel"]);
+    async fn rejects_date_and_place_edits() {
+        let input: Update = serde_json::from_str(r#"{"date":null}"#).unwrap();
+        assert!(matches!(
+            super::update("id", &input).await,
+            Err(super::ApiError::Protocol(_))
+        ));
     }
 
     #[test]

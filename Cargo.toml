@@ -1,6 +1,5 @@
 [workspace]
 members = [
-  "apps/cli",
   "apps/desktop/src-tauri",
   "crates/cms",
   "crates/consumers",
@@ -35,7 +34,6 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 unicode-segmentation = "1.13.3"
-clap = "4.6"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = "0.10"
 icalendar = { version = "0.17.13", default-features = false, features = ["parser"] }
@@ -157,7 +155,6 @@ ugos = { path = "crates/ugos" }
 vault = { path = "crates/vault" }
 time = { version = "0.3", features = ["formatting", "local-offset", "macros", "parsing"] }
 uuid = { version = "1", features = ["v4", "serde"] }
-walkdir = "2.5"
 
 # Keep build-time dylibs loadable with the macOS 27 linker (rust-lang/rust#157750).
 [profile.release.build-override]

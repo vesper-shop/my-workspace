@@ -36,8 +36,7 @@ photo stream, continue a longer draft, or publish content without switching betw
 - **Local first** — the desktop experience starts immediately, with Todo and spending records stored locally
 - **One trusted core** — Rust owns commands, network access, content compilation, publication, and
   runtime behavior
-- **Focused interfaces** — Svelte provides a calm, responsive view layer while the CLI exposes the
-  same underlying workflows for automation
+- **Focused interfaces** — Svelte provides a calm, responsive view layer
 
 ```mermaid
 flowchart LR
@@ -69,8 +68,7 @@ pnpm check
 pnpm test
 ```
 
-Create a desktop installer with `pnpm build:desktop`, or build the CLI with `pnpm build:cli`.
-The desktop installer does not include the CLI. Install the CLI separately with `pnpm cli:install`, then run `vesper`.
+Create a desktop installer with `pnpm build:desktop`.
 
 ## Documentation
 
@@ -78,6 +76,5 @@ The desktop installer does not include the CLI. Install the CLI separately with 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Dashboard integrations](docs/DASHBOARD.md)
 - [Development and releases](docs/DEVELOPMENT.md)
-- [Local-to-consumer workflow](docs/WORKFLOW.md)
 - [Design system](docs/DESIGN.md)
 - [Code style](docs/STYLEGUIDE.md)

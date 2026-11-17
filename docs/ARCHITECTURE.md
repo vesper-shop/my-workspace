@@ -9,7 +9,6 @@ stores artifacts. This repository does not host a cloud application backend.
 | Path                    | Responsibility                                                        |
 | ----------------------- | --------------------------------------------------------------------- |
 | `apps/desktop`          | Tauri v2 shell, Svelte 5 views and Rust command adapters              |
-| `apps/cli`              | The `vesper` command-line interface                                   |
 | `crates/cms`            | Content builds, publication and R2 object storage                     |
 | `crates/markdown`       | Markdown compilation for publications, Knowledge, Memos and chat      |
 | `crates/md-dialect`     | Custom fence and shortcode validation and rendering, without I/O      |
@@ -155,7 +154,7 @@ and compilation. Annotation, quote and diff rendering require no provider reads.
 Article cards use host-provided index metadata; `github`, `market-data`, and `link-preview` supply
 repository, market, website and X post metadata for provider cards. [Markdown](MARKDOWN.md) owns
 syntax and rendering safety;
-[Workflow](WORKFLOW.md) owns operations and recovery.
+[Workflow](<>) owns operations and recovery.
 
 `vesper build` compiles Markdown under `content/` to HTML in a temporary directory, copies other
 regular assets, and emits `content.json`. It rejects symlinks and output collisions. A Rust guard
@@ -177,27 +176,24 @@ repository, view and image caches; its submodules adapt commands. Cache revision
 read from
 restoring invalidated content. Writes retain each consumer's server-side coordination.
 
-| Consumer  | Boundary                                                                                                                                                                                                                                                                                               |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Memos     | API records include Markdown; Rust compiles it without another R2 read. CRUD and X imports use the Memo API.                                                                                                                                                                                           |
-| Moment    | API owns metadata; Rust prepares image variants. With R2 credentials it uploads them to R2, then registers them; otherwise it posts them to the upload API. Images are read from R2 when configured and from the public photo route otherwise. The list is a bounded batch without a synthetic cursor. |
-| Knowledge | API summaries form the metadata-only index. Opening a document performs an authorized detail read and Rust compilation. Writes require both the content hash and exact updated timestamp for conflict detection.                                                                                       |
+| Consumer  | Boundary                                                                                                                                                                                                                                                                                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memos     | Memos are Vesper entries without photos, read from `/api/entries/documents` (search goes through `/api/entries?q=`) with full Markdown; Rust compiles it. Writes and X imports call Vesper's entries API; pin, favorite and archive are entry PATCHes.                                                                                                      |
+| Moment    | Photos come from Vesper's `/api/photos`; a caption's first paragraph is the title. Rust prepares the thumbnail and thumb hash, uploads the original with `PUT /api/photos` and creates a public entry carrying it. Edits and deletes change that entry; Vesper keeps the taken time and place. Images load through `vesper-asset` keys under `img/vesper/`. |
+| Knowledge | API summaries form the metadata-only index. Opening a document performs an authorized detail read and Rust compilation. Writes require both the content hash and exact updated timestamp for conflict detection.                                                                                                                                            |
 
 ### Consumer open API
 
-The three consumer sites share one API shape. The browser and external clients call the same
-`/api/*` routes; there is no separate versioned surface. Vesper signs in once through the
-you-find.me OAuth gateway (client `workspace`, PKCE on `127.0.0.1:8793`) and sends one access token
-whose audience covers all three sites; each site verifies the token against the gateway's JWKS, its
-own audience and write scope, and `ALLOWED_EMAIL`. Without a bearer token the owner session applies.
-The CLI and desktop share the stored session, so refresh-token rotation runs under a cross-process
-vault lock and a rejected grant clears the session.
+The desktop signs in once with Vesper (noted-this.date): it registers itself as an OAuth client on
+first use (kept in the vault), signs in with PKCE on `127.0.0.1:8793` and sends the Vesper access
+token to Vesper for memos and photos and to my-knowledge for articles, which checks it by calling
+Vesper's `/api/workspace` and comparing the owner's workspace UUID. Refresh-token rotation runs under
+a vault lock and a rejected grant clears the session.
 
-| Site                    | REST resources                                                     | Anonymous reads                                                                     |
-| ----------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `memos.you-find.me`     | `/api/memos`, `/api/memos/{id}`, `/api/tags`                       | Public memos from `/api/memos`                                                      |
-| `moment.you-find.me`    | `/api/photos`, `/api/photos/{id}`, `/api/tags`                     | Photos, tags, `/api/media?kind=anime\|film`, `/api/haul`, `/api/wish`, `/api/music` |
-| `knowledge.you-find.me` | `/api/articles` (with `search`), `/api/articles/{id}`, `/api/tags` | None; public articles are published through pages, RSS and `llms.txt`               |
+| Site                    | REST resources                                                       | Anonymous reads                                                       |
+| ----------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `noted-this.date`       | `/api/entries`, `/api/entries/documents`, `/api/photos`, `/api/tags` | None                                                                  |
+| `knowledge.you-find.me` | `/api/articles` (with `search`), `/api/articles/{id}`, `/api/tags`   | None; public articles are published through pages, RSS and `llms.txt` |
 
 Lists take `cursor`, `limit`, `search`, and comma-separated `tags`, and return
 `{ <items>, nextCursor }` with `nextCursor: null` on the last page. Single records are wrapped as
@@ -276,29 +272,3 @@ behavior and [Persistence](PERSISTENCE.md#planner) owns record invariants.
 Validation and aggregation stay in Rust. Spending shares Planner's selected date, but has independent
 records and request state. Navigation during a write cannot change the submitted expense date;
 mutations invalidate other views of that month. Removing a widget preserves its records.
-
-## CLI surface
-
-Clap defines the command tree, options, generated help, version output, and usage errors before
-credential or runtime initialization. Parsed arguments are normalized for the existing feature
-adapters; the feature crates retain business validation and external I/O.
-
-The CLI groups commands by feature and reuses the same Rust providers, consumer APIs and stores.
-File/stdin parsing finishes before remote writes. Status reads can target one provider or all;
-content publication remains an explicit operation. Desktop layout and player state stay outside the
-CLI. Use `vesper --help` and [Workflow](WORKFLOW.md) for command usage and recovery.
-
-Command hierarchy follows business ownership, independently of desktop page and widget placement:
-
-| Boundary                | CLI surface                                                        | Desktop relationship                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Independent domains     | `memo`, `knowledge`, `photo`, `todo`, `ledger`, `game`, `memory`   | Own records and operations through shared Rust crates. Spending is a widget, but its Ledger domain is independent of Todo. |
-| Domain capabilities     | `todo notion`, Todo habit check-ins, `photo object`, game archives | Stay under the owning domain instead of becoming top-level commands for each panel or control.                             |
-| Provider projections    | `status <source>`                                                  | Expose useful reads such as weather, usage and balances without reproducing Dashboard composition or polling.              |
-| Publication workflow    | `build`, `publish`                                                 | Explicit local-content operations, separate from individual consumer records.                                              |
-| Presentation components | No CLI commands                                                    | Date pickers, chart modes, widget placement, Dynamic Island and window state belong to Desktop.                            |
-
-Extend the CLI when a desktop capability offers a useful terminal read or operation with explicit
-inputs and output. Reuse its Rust feature boundary; do not call a Svelte component or Tauri adapter.
-A new widget alone does not justify a new top-level command. Ledger exposes dated expense CRUD and
-monthly projections; its category and daily charts consume those projections without separate commands.

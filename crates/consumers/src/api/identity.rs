@@ -8,19 +8,16 @@ use super::{ApiError, REQUEST_TIMEOUT};
 
 pub use oauth::Authorization;
 
-const AUTHORIZE_ENDPOINT: &str = "https://you-find.me/api/auth/oauth2/authorize";
-const TOKEN_ENDPOINT: &str = "https://you-find.me/api/auth/oauth2/token";
-const USERINFO_ENDPOINT: &str = "https://you-find.me/api/auth/oauth2/userinfo";
-const REVOKE_ENDPOINT: &str = "https://you-find.me/api/auth/oauth2/revoke";
-const CLIENT_ID: &str = "workspace";
+const AUTHORIZE_ENDPOINT: &str = "https://noted-this.date/api/auth/oauth2/authorize";
+const TOKEN_ENDPOINT: &str = "https://noted-this.date/api/auth/oauth2/token";
+const REGISTER_ENDPOINT: &str = "https://noted-this.date/api/auth/oauth2/register";
+const REVOKE_ENDPOINT: &str = "https://noted-this.date/api/auth/oauth2/revoke";
+const WORKSPACE_ENDPOINT: &str = "https://noted-this.date/api/workspace";
 const REDIRECT_URI: &str = "http://127.0.0.1:8793/callback";
-const SCOPES: &str = "openid profile email offline_access memos:read memos:write moment:read moment:write knowledge:read knowledge:write";
-const RESOURCES: [&str; 3] = [
-    "https://memos.you-find.me",
-    "https://moment.you-find.me",
-    "https://knowledge.you-find.me",
-];
-const VAULT_ACCOUNT: &str = "you-find-me";
+const SCOPES: &str = "entries:create entries:read entries:update entries:delete photos:create photos:read tags:read offline_access";
+const RESOURCES: [&str; 1] = ["https://noted-this.date/mcp"];
+const VAULT_ACCOUNT: &str = "vesper";
+const CLIENT_ACCOUNT: &str = "vesper-client";
 const MARGIN: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -43,9 +40,59 @@ struct Access {
 
 static ACCESS: Mutex<Option<Access>> = Mutex::const_new(None);
 
+#[derive(Serialize, Deserialize)]
+struct Registration {
+    client_id: String,
+}
+
+#[derive(Deserialize)]
+struct Workspace {
+    handle: String,
+}
+
+#[derive(Deserialize)]
+struct Profile {
+    name: String,
+    image: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceResponse {
+    workspace: Workspace,
+    profile: Profile,
+}
+
+async fn client_id() -> Result<String, ApiError> {
+    // Vesper checks requested scopes against the ones registered, so a new scope needs a new client.
+    let account = format!("{CLIENT_ACCOUNT} {SCOPES}");
+    if let Stored::Ready(saved) = vault::read_json::<Registration>(&account)? {
+        return Ok(saved.client_id);
+    }
+    let registration: Registration = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()?
+        .post(REGISTER_ENDPOINT)
+        .json(&serde_json::json!({
+            "client_name": "Vesper Workspace",
+            "application_type": "native",
+            "redirect_uris": [REDIRECT_URI],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+            "scope": SCOPES,
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    vault::save_json(&account, &registration)?;
+    Ok(registration.client_id)
+}
+
 pub async fn authorization() -> Result<Authorization, ApiError> {
     oauth::authorize(
-        CLIENT_ID,
+        &client_id().await?,
         AUTHORIZE_ENDPOINT,
         TOKEN_ENDPOINT,
         REDIRECT_URI,
@@ -60,19 +107,24 @@ pub async fn sign_in(authorization: Authorization) -> Result<Account, ApiError> 
     let token = oauth::authenticate(authorization)
         .await
         .map_err(ApiError::Identity)?;
-    let refresh_token = token.refresh_token.ok_or_else(|| {
-        ApiError::Protocol("you-find.me did not return a refresh token".to_owned())
-    })?;
-    let account: Account = reqwest::Client::builder()
+    let refresh_token = token
+        .refresh_token
+        .ok_or_else(|| ApiError::Protocol("Vesper did not return a refresh token".to_owned()))?;
+    let workspace: WorkspaceResponse = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()?
-        .get(USERINFO_ENDPOINT)
+        .get(WORKSPACE_ENDPOINT)
         .bearer_auth(&token.access_token)
         .send()
         .await?
         .error_for_status()?
         .json()
         .await?;
+    let account = Account {
+        email: format!("@{}", workspace.workspace.handle),
+        name: workspace.profile.name,
+        picture: workspace.profile.image,
+    };
     let mut access = ACCESS.lock().await;
     let _lock = vault::lock(VAULT_ACCOUNT)?;
     vault::save_json(
@@ -115,7 +167,7 @@ pub async fn sign_out() -> Result<(), ApiError> {
         .form(&[
             ("token", session.refresh_token.as_str()),
             ("token_type_hint", "refresh_token"),
-            ("client_id", CLIENT_ID),
+            ("client_id", client_id().await?.as_str()),
         ])
         .send()
         .await?
@@ -136,7 +188,7 @@ pub(crate) async fn access_token() -> Result<String, ApiError> {
         return Err(ApiError::SignedOut);
     };
     let token = match oauth::refresh(
-        CLIENT_ID,
+        &client_id().await?,
         TOKEN_ENDPOINT,
         &session.refresh_token,
         &RESOURCES,
@@ -169,3 +221,7 @@ pub(crate) async fn access_token() -> Result<String, ApiError> {
 pub(crate) async fn invalidate() {
     *ACCESS.lock().await = None;
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/identity.rs"]
+mod tests;

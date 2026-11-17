@@ -195,7 +195,6 @@ it("preserves a completed write after navigation against older tags and startup 
 	if (!normal) throw new Error("Missing command mock");
 	const created: MemoView = {
 		id: "created",
-		r2Key: "memo/created",
 		content: "Saved across navigation #new",
 		html: "<p>Saved across navigation</p>",
 		tags: ["new"],

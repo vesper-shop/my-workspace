@@ -7,7 +7,6 @@ Each document owns one responsibility. Read the owner rather than repeating its 
 | [Architecture](ARCHITECTURE.md) | Packages, boundaries and data flow               |
 | [Dashboard](DASHBOARD.md)       | Sources, scheduling and failure behavior         |
 | [Development](DEVELOPMENT.md)   | Setup, commands, credentials and releases        |
-| [Workflow](WORKFLOW.md)         | Content operations, publication and recovery     |
 | [Markdown](MARKDOWN.md)         | Compilation and rendering safety                 |
 | [Design](DESIGN.md)             | Tokens, components, layout and interaction       |
 | [Code style](STYLEGUIDE.md)     | Engineering and review rules                     |

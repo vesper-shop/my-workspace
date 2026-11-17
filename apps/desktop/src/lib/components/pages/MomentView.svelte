@@ -307,8 +307,6 @@
 			{#if selectedPhoto.date}<dl><dt>Date</dt><dd>{dateFormatter.format(new Date(selectedPhoto.date))}</dd></dl>{/if}
 			{#if selectedPhoto.geo}<dl><dt>Location</dt><dd>{selectedPhoto.geo.lat.toFixed(5)}, {selectedPhoto.geo.lng.toFixed(5)}</dd></dl>{/if}
 			<dl><dt>Dimensions</dt><dd>{selectedPhoto.width} × {selectedPhoto.height}</dd></dl>
-			{#if selectedPhoto.format}<dl><dt>Format</dt><dd>{selectedPhoto.format}</dd></dl>{/if}
-			{#if selectedPhoto.size}<dl><dt>Size</dt><dd>{(selectedPhoto.size / 1024 / 1024).toFixed(1)} MB</dd></dl>{/if}
 			{#if selectedPhoto.tags.length > 0}<div class="viewer-tags">{#each selectedPhoto.tags as tag (tag)}<span>#{tag}</span>{/each}</div>{/if}
 			<div class="delete-actions">
 				{#if confirmingDelete}

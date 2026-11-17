@@ -105,11 +105,16 @@ pub async fn asset(key: &str, repository: Option<&Repository>) -> Result<Vec<u8>
             "only img/ object keys can be displayed".to_owned(),
         )));
     }
+    if key.starts_with(crate::api::moment::KEY_PREFIX) {
+        return crate::api::moment::image(key)
+            .await
+            .map_err(ConsumerError::Public);
+    }
     match repository {
         Some(repository) => Ok(repository.store.get(key).await?),
-        None => crate::api::moment::image(key)
-            .await
-            .map_err(ConsumerError::Public),
+        None => Err(ConsumerError::Store(StoreError::Request(
+            "photos are served by Vesper".to_owned(),
+        ))),
     }
 }
 

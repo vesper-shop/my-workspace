@@ -4,7 +4,6 @@ export type Channel = "memos" | "moment" | "knowledge";
 
 export interface Memo {
 	id: string;
-	r2Key: string;
 	content: string;
 	tags: string[];
 	createdAt: string;
@@ -47,6 +46,7 @@ export type MemoUpdate =
 
 export interface PhotoItem {
 	id: string;
+	entryId: string;
 	url: string;
 	thumbnailUrl: string;
 	r2Key: string;
@@ -59,8 +59,6 @@ export interface PhotoItem {
 	tags: string[];
 	date: string | null;
 	description: string | null;
-	size: number | null;
-	format: string | null;
 	geo: { lat: number; lng: number } | null;
 }
 

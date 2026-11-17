@@ -67,8 +67,8 @@ impl Display for ApiError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Credentials(source) => Display::fmt(source, formatter),
-            Self::SignedOut => write!(formatter, "sign in with your you-find.me account"),
-            Self::Identity(source) => write!(formatter, "you-find.me sign-in failed: {source}"),
+            Self::SignedOut => write!(formatter, "sign in with your Vesper account"),
+            Self::Identity(source) => write!(formatter, "Vesper sign-in failed: {source}"),
             Self::Media(source) => Display::fmt(source, formatter),
             Self::Store(source) => Display::fmt(source, formatter),
             Self::Request(source) => write!(formatter, "consumer API request failed: {source}"),

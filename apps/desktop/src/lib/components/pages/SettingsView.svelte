@@ -704,7 +704,7 @@
 	<Card>
 		<CardHeader class="settings-card-header settings-card-header-status">
 			<span class="settings-icon"><KeyRound size={16} /></span>
-			<div><CardTitle class="settings-card-title">you-find.me</CardTitle><CardDescription class="settings-card-description">One sign-in opens Memos, Moment and Knowledge.</CardDescription></div>
+			<div><CardTitle class="settings-card-title">Vesper</CardTitle><CardDescription class="settings-card-description">One Vesper sign-in opens Memos, Moment and Knowledge.</CardDescription></div>
 			{#if configuration?.account.status === "ready"}<ConfigurationBadge />{/if}
 		</CardHeader>
 		{@render failure(formErrors.account)}
@@ -717,8 +717,8 @@
 					</div>
 					<Button class="settings-save-button" size="sm" type="button" variant="outline" disabled={saving.account} onclick={() => switchAccount("sign_out")}>{saving.account ? "Signing out…" : "Sign out"}</Button>
 				{:else}
-					<div><Label>Browser sign-in</Label><p>Vesper opens you-find.me in your browser and returns here.</p></div>
-					<Button class="settings-save-button" size="sm" type="button" disabled={saving.account || configuration === null} onclick={() => switchAccount("sign_in")}>{saving.account ? "Waiting for you-find.me…" : "Sign in"}</Button>
+					<div><Label>Browser sign-in</Label><p>Vesper opens noted-this.date in your browser and returns here.</p></div>
+					<Button class="settings-save-button" size="sm" type="button" disabled={saving.account || configuration === null} onclick={() => switchAccount("sign_in")}>{saving.account ? "Waiting for Vesper…" : "Sign in"}</Button>
 				{/if}
 			</div>
 		</CardContent>

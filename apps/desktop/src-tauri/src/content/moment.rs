@@ -23,14 +23,7 @@ pub(crate) async fn create_photo(
     let state = app.state::<Content>();
     let result = async {
         input.validate()?;
-        let repository = state.repository().await?;
-        let photo = moment::upload(
-            repository.as_ref().map(|repository| repository.store()),
-            input,
-            source,
-            MetadataPolicy::Reviewed,
-        )
-        .await?;
+        let photo = moment::upload(input, source, MetadataPolicy::Reviewed).await?;
         state.invalidate_view(Channel::Moment).await;
         Ok::<_, CommandError>(photo)
     };

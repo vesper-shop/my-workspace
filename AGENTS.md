@@ -10,8 +10,7 @@
 
 ## Architecture
 
-`apps/desktop` is the Tauri v2 application, `apps/cli` provides the Rust `vesper` binary,
-`crates/` owns feature and provider behavior, and `packages/` contains shared UI and TypeScript
+`apps/desktop` is the Tauri v2 application, `crates/` owns feature and provider behavior, and `packages/` contains shared UI and TypeScript
 configuration. [Architecture](docs/ARCHITECTURE.md#repository-layout) owns the full directory map
 and each package's responsibility.
 

@@ -20,6 +20,7 @@ function deferred<T>() {
 }
 const original: PhotoItem = {
 	id: "photo",
+	entryId: "photo",
 	url: "https://example.test/photo",
 	thumbnailUrl: "https://example.test/thumb",
 	r2Key: "img/photo.png",
@@ -32,8 +33,6 @@ const original: PhotoItem = {
 	tags: [],
 	date: null,
 	description: null,
-	size: null,
-	format: null,
 	geo: null,
 };
 function page(photos: PhotoItem[]): CommandResponse<ChannelView> {

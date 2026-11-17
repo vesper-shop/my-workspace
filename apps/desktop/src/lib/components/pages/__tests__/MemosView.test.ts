@@ -57,7 +57,6 @@ it("retains a composer draft across navigation and keeps edits made during a sav
 		status: "ready",
 		data: {
 			id: "memo-1",
-			r2Key: "memo-1.md",
 			content: "Submitted draft",
 			html: "<p>Submitted draft</p>",
 			tags: [],
@@ -85,7 +84,6 @@ it.each(["active", "favorites"] as const)(
 	async (display) => {
 		const memo: MemoView = {
 			id: "public-memo",
-			r2Key: "public-memo.md",
 			content: "Original",
 			html: "<p>Original</p>",
 			tags: [],
@@ -313,7 +311,6 @@ it("restores the applied search after remounting so clearing it resets the feed"
 it("locks a channel once the memo is published there", async () => {
 	const memo: MemoView = {
 		id: "public-memo",
-		r2Key: "public-memo.md",
 		content: "Original",
 		html: "<p>Original</p>",
 		tags: [],

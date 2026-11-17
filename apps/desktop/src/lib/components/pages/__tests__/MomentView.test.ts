@@ -17,6 +17,7 @@ it("restores the share icon after copying a photo link", async () => {
 	Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 	const photo: PhotoItem = {
 		id: "harbour",
+		entryId: "harbour",
 		url: "https://example.com/harbour.jpg",
 		thumbnailUrl: "https://example.com/harbour-thumb.jpg",
 		r2Key: "photos/harbour.jpg",
@@ -29,8 +30,6 @@ it("restores the share icon after copying a photo link", async () => {
 		tags: [],
 		date: "2026-10-01",
 		description: null,
-		size: null,
-		format: null,
 		geo: null,
 	};
 	const target = document.createElement("div");

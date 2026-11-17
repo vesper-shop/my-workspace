@@ -9,7 +9,7 @@ pub(crate) async fn sign_in(app: tauri::AppHandle) -> CommandResponse<String> {
         let authorization = consumers::api::identity::authorization().await?;
         app.opener()
             .open_url(&authorization.url, None::<String>)
-            .map_err(|error| format!("Could not open you-find.me sign-in: {error}"))?;
+            .map_err(|error| format!("Could not open Vesper sign-in: {error}"))?;
         let account = consumers::api::identity::sign_in(authorization).await?;
         if let Some(window) = app.get_webview_window("main") {
             window.set_focus()?;

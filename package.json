@@ -4,15 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vp run dev:desktop",
-    "dev:cli": "vp run --filter ./apps/cli dev",
     "dev:desktop": "vp run --filter ./apps/desktop dev",
-    "build:cli": "vp run --filter ./apps/cli build",
     "build:desktop": "vp run --filter ./apps/desktop build",
-    "content:build": "cargo run -p vesper-cli -- build",
-    "content:publish": "cargo run -p vesper-cli -- publish",
-    "content:publish:live": "cargo run -p vesper-cli -- publish --live",
-    "cli:install": "cargo install --path apps/cli --locked",
-    "cli:uninstall": "cargo uninstall vesper-cli",
     "lint": "vp run lint:frontend && vp run lint:rust",
     "lint:frontend": "eslint . --max-warnings 0",
     "lint:rust": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
@@ -38,13 +31,13 @@
     "@types/node": "26.6.6",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitest/coverage-v8": "5.1.0",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-plugin-svelte": "3.24.1",
     "globals": "17.14.0",
     "simple-git-hooks": "2.14.0",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.1",
-    "vite-plus": "1.5.0"
+    "typescript-eslint": "8.72.2",
+    "vite-plus": "1.6.0"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm run precommit"
