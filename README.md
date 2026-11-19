@@ -20,16 +20,13 @@ photo stream, continue a longer draft, or publish content without switching betw
 
 - **Dashboard** — UGOS telemetry, weather, GitHub activity, Todo, and AI usage or balances
 - **Memos** — write, search, pin, favorite, archive, and restore short-form notes
-- **Moment** — browse and manage a personal photo stream with progressive R2-backed images
+- **Moment** — browse and manage a personal photo stream with progressive images
 - **Knowledge** — create and read long-form Markdown with a focused article experience
 - **Newspaper** — the AIHOT AI daily on a calm paper surface
 - **Music** — browse and play Spotify and QQ Music collections
-- **Inbox** — read notifications from a configured ntfy feed
 - **Planning and spending** — manage Todo, habits, calendars, and local GBP expenses on the dashboard
 - **Games** — view daily notes, pull history, and Steam activity on the dashboard
 - **Terminals** — open a local shell or connect to permitted Tailscale devices over SSH
-- **CLI** — reuse the same Rust capability crates for Todo, content builds, publication, and
-  consumer workflows
 
 ## Built around clear boundaries
 
@@ -41,23 +38,18 @@ photo stream, continue a longer draft, or publish content without switching betw
 ```mermaid
 flowchart LR
     Desktop[Tauri + Svelte desktop] --> Core[Rust core]
-    CLI[vesper CLI] --> Core
     Core --> APIs[Consumer APIs]
-    Core --> R2[(Cloudflare R2)]
     APIs --> Services[Memos · Knowledge · Moment]
-    R2 --> Services
 ```
 
 The workspace is built with Tauri v2, Svelte 5, Rust, and a small shared UI package. Companion APIs
-remain responsible for their own durable records, while Cloudflare R2 stores images and published
-artifacts.
+remain responsible for their own durable records and media.
 
 > [!IMPORTANT]
 > Vesper is a highly customized personal workspace built around one person's infrastructure,
 > accounts, content conventions, and daily workflow. It is not an out-of-the-box general-purpose
-> application. A fork needs compatible companion services such as `my-memos`, `my-knowledge`, and
-> `my-moment`, plus its own APIs, Cloudflare R2 storage, credentials, and optional dashboard
-> integrations.
+> application. A fork needs compatible companion services such as Vesper and `my-knowledge`, plus
+> its own credentials and optional dashboard integrations.
 
 ## Build from source
 

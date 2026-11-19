@@ -30,7 +30,7 @@
 	let disposed = false;
 	let inputQueue = Promise.resolve();
 	let queuedBytes = 0;
-	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+	let resizeTimer: number | null = null;
 	let lastSize = "";
 
 	async function disconnect() {
@@ -240,8 +240,8 @@
 					send(Uint8Array.from(data, (character) => character.charCodeAt(0) & 255)),
 				);
 				observer = new ResizeObserver(() => {
-					if (resizeTimer !== null) clearTimeout(resizeTimer);
-					resizeTimer = setTimeout(resize, 80);
+					if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+					resizeTimer = window.setTimeout(resize, 80);
 				});
 				observer.observe(host);
 				resize();
@@ -255,7 +255,7 @@
 				inputHost?.removeEventListener(event, recordActivity, true);
 			disposed = true;
 			void disconnect();
-			if (resizeTimer !== null) clearTimeout(resizeTimer);
+			if (resizeTimer !== null) window.clearTimeout(resizeTimer);
 			observer?.disconnect();
 			terminal?.dispose();
 			terminal = null;

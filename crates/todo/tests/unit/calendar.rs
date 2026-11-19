@@ -3,17 +3,14 @@ use super::*;
 
 #[tokio::test]
 async fn imports_once() {
-    let (directory, store) = test_store();
+    let (_directory, store) = test_store();
+    std::fs::create_dir_all(&store.schedule_directory).unwrap();
     std::fs::write(
-        directory.path().join("work.ics"),
+        store.schedule_directory.join("work.ics"),
         "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:standup\nSUMMARY:Standup\nDTSTART:20260823T093000\nRRULE:FREQ=DAILY\nEND:VEVENT\nEND:VCALENDAR\n",
     )
     .unwrap();
 
-    store
-        .import_schedules(&[directory.path().join("work.ics")])
-        .await
-        .unwrap();
     let first = store.sync_schedule("2026-08-23").await.unwrap();
     assert_eq!(first.items.len(), 1);
     assert_eq!(first.items[0].text, "09:30 Standup");
@@ -49,24 +46,18 @@ async fn imports_once() {
 
 #[tokio::test]
 async fn combines_calendars() {
-    let (directory, store) = test_store();
-    let sources = directory.path().join("sources");
-    std::fs::create_dir_all(&sources).unwrap();
-    let mut paths = Vec::new();
+    let (_directory, store) = test_store();
+    std::fs::create_dir_all(&store.schedule_directory).unwrap();
     for (name, summary) in [("work.ics", "Standup"), ("personal.ics", "Exercise")] {
-        let path = sources.join(name);
         std::fs::write(
-            &path,
+            store.schedule_directory.join(name),
             format!(
                 "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:daily\nSUMMARY:{summary}\nDTSTART:20260823\nEND:VEVENT\nEND:VCALENDAR\n"
             ),
         )
         .unwrap();
-        paths.push(path);
     }
 
-    let installed = store.import_schedules(&paths).await.unwrap();
-    assert_eq!(installed.len(), 2);
     let todos = store.sync_schedule("2026-08-23").await.unwrap();
     assert_eq!(todos.items.len(), 2);
     assert_eq!(
@@ -80,52 +71,10 @@ async fn combines_calendars() {
 }
 
 #[tokio::test]
-async fn rejects_duplicate_sources() {
-    let (directory, store) = test_store();
-    let first_directory = directory.path().join("first");
-    let second_directory = directory.path().join("second");
-    std::fs::create_dir_all(&first_directory).unwrap();
-    std::fs::create_dir_all(&second_directory).unwrap();
-    let calendar = "BEGIN:VCALENDAR\nEND:VCALENDAR\n";
-    let first = first_directory.join("Work.ics");
-    let second = second_directory.join("work.ics");
-    std::fs::write(&first, calendar).unwrap();
-    std::fs::write(&second, calendar).unwrap();
-
-    assert!(matches!(
-        store.import_schedules(&[first, second]).await,
-        Err(Error::DuplicateScheduleName(_))
-    ));
-    assert!(!store.database_path().exists());
-}
-
-#[tokio::test]
-async fn validates_sources() {
-    let (directory, store) = test_store();
-    let first = directory.path().join("first.ics");
-    let second = directory.path().join("second.ics");
-    std::fs::write(&first, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:old\nSUMMARY:Original\nDTSTART:20260823\nEND:VEVENT\nEND:VCALENDAR\n").unwrap();
-    store
-        .import_schedules(std::slice::from_ref(&first))
-        .await
-        .unwrap();
-    std::fs::write(&first, "BEGIN:VCALENDAR\nEND:VCALENDAR\n").unwrap();
-    std::fs::write(&second, "invalid").unwrap();
-    assert!(matches!(
-        store.import_schedules(&[first, second]).await,
-        Err(Error::ScheduleParse { .. })
-    ));
-    assert_eq!(
-        store.sync_schedule("2026-08-23").await.unwrap().items[0].text,
-        "Original"
-    );
-}
-
-#[tokio::test]
 async fn reads_existing_sources() {
     let (_directory, store) = test_store();
-    std::fs::create_dir_all(store.schedule_directory()).unwrap();
-    let path = store.schedule_directory().join("Existing.ics");
+    std::fs::create_dir_all(&store.schedule_directory).unwrap();
+    let path = store.schedule_directory.join("Existing.ics");
     let content = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:event\nSUMMARY:Existing calendar\nDTSTART:20260823\nEND:VEVENT\nEND:VCALENDAR\n";
     std::fs::write(&path, content).unwrap();
     let list = store.sync_schedule("2026-08-23").await.unwrap();
@@ -223,7 +172,7 @@ async fn reconciles_notion() {
 #[tokio::test]
 async fn locks_calendar() {
     let (_directory, first) = test_store();
-    let second = Store::new(first.database_path().to_owned());
+    let second = Store::new(first.path.to_owned());
     let guard = first.calendar_lock().await.unwrap();
     let mut waiting = Box::pin(second.calendar_lock());
     assert!(
@@ -252,7 +201,7 @@ fn retains_calendar_lock() {
         let competing = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(store.database_path().with_extension("calendar.lock"))
+            .open(store.path.with_extension("calendar.lock"))
             .unwrap();
         let (release, blocked) = std::sync::mpsc::channel();
         let blocker = tokio::task::spawn_blocking(move || blocked.recv().unwrap());
@@ -768,15 +717,12 @@ async fn retains_codex_lock() {
 
 #[tokio::test]
 async fn ics_content() {
-    let (directory, store) = test_store();
+    let (_directory, store) = test_store();
     let date = "2026-09-30";
-    let source = directory.path().join("work.ics");
+    std::fs::create_dir_all(&store.schedule_directory).unwrap();
+    let source = store.schedule_directory.join("work.ics");
     let original = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:review\nSUMMARY:Original\nDESCRIPTION:Source notes\nLOCATION:Room one\nDTSTART:20260930T093000\nEND:VEVENT\nEND:VCALENDAR\n";
     std::fs::write(&source, original).unwrap();
-    store
-        .import_schedules(std::slice::from_ref(&source))
-        .await
-        .unwrap();
     let first = store.sync_schedule(date).await.unwrap();
     let id = &first.items[0].id;
     let metadata = first.items[0].details.clone();
@@ -786,10 +732,6 @@ async fn ics_content() {
         .unwrap();
     assert_eq!(edited.items[0].details, metadata);
     std::fs::write(&source, original.replace("Original", "Source changed")).unwrap();
-    store
-        .import_schedules(std::slice::from_ref(&source))
-        .await
-        .unwrap();
     let refreshed = store.sync_schedule(date).await.unwrap();
     assert_eq!(refreshed.items[0].text, "Local title");
     assert_eq!(
@@ -797,7 +739,7 @@ async fn ics_content() {
         Some("Local notes")
     );
     assert!(!refreshed.items[0].source_owned);
-    let reopened = Store::new(store.database_path().to_owned());
+    let reopened = Store::new(store.path.to_owned());
     assert_eq!(reopened.get(date, id).await.unwrap(), refreshed.items[0]);
     store.set_completed(date, id, true).await.unwrap();
     assert!(matches!(

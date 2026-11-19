@@ -13,15 +13,10 @@ const PATH_ENCODING: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-pub(super) struct Source {
-    pub(super) url: String,
-    pub(super) local: bool,
-}
-
 pub(super) struct Media<'a> {
     kind: &'a str,
-    pub(super) src: Source,
-    pub(super) poster: Option<Source>,
+    src: String,
+    poster: Option<String>,
     title: &'a str,
     caption: Option<&'a str>,
     align: &'a str,
@@ -66,7 +61,7 @@ pub(super) fn parse<'a>(mut fields: HashMap<&str, &'a str>) -> Result<Media<'a>,
     })
 }
 
-fn parse_source(value: &str, field: &'static str) -> Result<Source, EmbedError> {
+fn parse_source(value: &str, field: &'static str) -> Result<String, EmbedError> {
     let invalid = || EmbedError::InvalidMedia {
         field,
         message: "expected an HTTP(S) URL without credentials or a document-relative asset path",
@@ -99,19 +94,13 @@ fn parse_source(value: &str, field: &'static str) -> Result<Source, EmbedError> 
                     url.set_query(None);
                 }
             }
-            Ok(Source {
-                url: url.to_string(),
-                local: false,
-            })
+            Ok(url.to_string())
         }
         Err(ParseError::RelativeUrlWithoutBase) => {
             if value.starts_with('/') || value.starts_with('~') || value.contains(['?', '#']) {
                 return Err(invalid());
             }
-            Ok(Source {
-                url: utf8_percent_encode(value, PATH_ENCODING).to_string(),
-                local: true,
-            })
+            Ok(utf8_percent_encode(value, PATH_ENCODING).to_string())
         }
         Err(_) => Err(invalid()),
     }
@@ -122,15 +111,15 @@ pub(super) fn render(fields: HashMap<&str, &str>) -> Result<String, EmbedError> 
     let preview = media.kind == "video" && media.poster.is_none();
     // An opening-time fragment requests a decoded preview frame in WebKit as well as metadata.
     // Preserve authored fragments, including an explicit playback start time.
-    let src = if preview && !media.src.url.contains('#') {
-        format!("{}#t=0.001", media.src.url)
+    let src = if preview && !media.src.contains('#') {
+        format!("{}#t=0.001", media.src)
     } else {
-        media.src.url.clone()
+        media.src.clone()
     };
     let preload = if preview { "metadata" } else { "none" };
     let poster = media
         .poster
-        .map(|source| format!(" poster=\"{}\"", encode_quoted_attribute(&source.url)))
+        .map(|source| format!(" poster=\"{}\"", encode_quoted_attribute(&source)))
         .unwrap_or_default();
     let caption = media
         .caption
@@ -154,7 +143,7 @@ pub(super) fn render(fields: HashMap<&str, &str>) -> Result<String, EmbedError> 
         kind = media.kind,
         align = media.align,
         src = encode_quoted_attribute(&src),
-        href = encode_quoted_attribute(&media.src.url),
+        href = encode_quoted_attribute(&media.src),
         preload = preload,
         title = encode_quoted_attribute(media.title),
     ))

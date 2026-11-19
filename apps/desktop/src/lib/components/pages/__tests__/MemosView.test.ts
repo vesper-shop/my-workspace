@@ -22,7 +22,7 @@ it("retains a composer draft across navigation and keeps edits made during a sav
 		memos: [],
 		tags: [],
 		display: "active" as const,
-		filters: { search: "", tags: [], sortByUpdated: false },
+		filters: { search: "", tags: [] },
 		onfilter: vi.fn().mockResolvedValue(null),
 		onopenmemo: vi.fn(),
 		oncreate: vi.fn(() => pending),
@@ -61,12 +61,10 @@ it("retains a composer draft across navigation and keeps edits made during a sav
 			html: "<p>Submitted draft</p>",
 			tags: [],
 			createdAt: "2026-09-05",
-			updatedAt: "2026-09-05",
 			visibility: "private",
 			pinned: false,
 			favorite: false,
 			archived: false,
-			metadataComplete: true,
 		},
 	});
 	await vi.waitFor(() =>
@@ -88,18 +86,16 @@ it.each(["active", "favorites"] as const)(
 			html: "<p>Original</p>",
 			tags: [],
 			createdAt: "2026-09-05",
-			updatedAt: "2026-09-05",
 			visibility: "public",
 			pinned: false,
 			favorite: display === "favorites",
 			archived: false,
-			metadataComplete: true,
 		};
 		const props = {
 			memos: [memo],
 			tags: [],
 			display,
-			filters: { search: "", tags: [], sortByUpdated: false },
+			filters: { search: "", tags: [] },
 			onfilter: vi.fn().mockResolvedValue(null),
 			onopenmemo: vi.fn(),
 			oncreate: vi.fn(),
@@ -188,7 +184,7 @@ it("can remove a selected tag after it disappears from the refreshed index", asy
 				return snapshot.current;
 			},
 			display: "active",
-			filters: { search: "", tags: [], sortByUpdated: false },
+			filters: { search: "", tags: [] },
 			onfilter,
 			onopenmemo: vi.fn(),
 			oncreate: vi.fn(),
@@ -203,13 +199,13 @@ it("can remove a selected tag after it disappears from the refreshed index", asy
 	const tag = target.querySelector<HTMLButtonElement>('[aria-label="Memo tags"] button');
 	if (!tag) throw new Error("Tag missing");
 	tag.click();
-	await vi.waitFor(() => expect(onfilter).toHaveBeenLastCalledWith("", ["old"], false, "active"));
+	await vi.waitFor(() => expect(onfilter).toHaveBeenLastCalledWith("", ["old"], "active"));
 	tags.set([]);
 	await tick();
 	const remove = target.querySelector<HTMLButtonElement>('[aria-label="Memo tags"] button');
 	if (!remove) throw new Error("Selected tag cannot be removed");
 	remove.click();
-	await vi.waitFor(() => expect(onfilter).toHaveBeenLastCalledWith("", [], false, "active"));
+	await vi.waitFor(() => expect(onfilter).toHaveBeenLastCalledWith("", [], "active"));
 	await unmount(view);
 	target.remove();
 });
@@ -239,7 +235,7 @@ it("shows tag edge controls only for hidden tags and scrolls to both ends", asyn
 				return snapshot.current;
 			},
 			display: "active",
-			filters: { search: "", tags: [], sortByUpdated: false },
+			filters: { search: "", tags: [] },
 			onfilter: vi.fn().mockResolvedValue(null),
 			onopenmemo: vi.fn(),
 			oncreate: vi.fn(),
@@ -289,7 +285,7 @@ it("restores the applied search after remounting so clearing it resets the feed"
 			memos: [],
 			tags: [],
 			display: "active",
-			filters: { search: "kept", tags: [], sortByUpdated: false },
+			filters: { search: "kept", tags: [] },
 			onfilter,
 			onopenmemo: vi.fn(),
 			oncreate: vi.fn(),
@@ -303,7 +299,7 @@ it("restores the applied search after remounting so clearing it resets the feed"
 	await tick();
 	expect(findElement<HTMLInputElement>(target, '[aria-label="Search memos"]').value).toBe("kept");
 	findElement<HTMLButtonElement>(target, ".clear-search").click();
-	await vi.waitFor(() => expect(onfilter).toHaveBeenLastCalledWith("", [], false, "active"));
+	await vi.waitFor(() => expect(onfilter).toHaveBeenLastCalledWith("", [], "active"));
 	await unmount(view);
 	target.remove();
 });
@@ -315,18 +311,16 @@ it("locks a channel once the memo is published there", async () => {
 		html: "<p>Original</p>",
 		tags: [],
 		createdAt: "2026-09-05",
-		updatedAt: "2026-09-05",
 		visibility: "public",
 		pinned: false,
 		favorite: false,
 		archived: false,
-		metadataComplete: true,
 	};
 	const props = {
 		memos: [memo],
 		tags: [],
 		display: "active" as const,
-		filters: { search: "", tags: [], sortByUpdated: false },
+		filters: { search: "", tags: [] },
 		onfilter: vi.fn().mockResolvedValue(null),
 		onopenmemo: vi.fn(),
 		oncreate: vi.fn(),

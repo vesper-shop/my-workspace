@@ -24,7 +24,7 @@ tests without loading unrelated features.
   or `undefined` when a concrete serialized contract is available, and do not use `??` to hide an
   imprecise contract.
 - Tauri commands translate between the frontend and Rust crates. They should not implement provider,
-  UGOS, R2, or Markdown behavior.
+  UGOS, or Markdown behavior.
 
 ## Packages and files
 
@@ -43,7 +43,7 @@ assigned content slot, centered within the main area by the shared frame. Shared
 compositions retain their internal proportions and typography. Unifying the outer frame must not
 rearrange those compositions.
 Supporting components and view sessions belong to the feature that owns them: `dashboard`, `games`,
-`knowledge`, `memos`, `moment`, `settings`, or `inbox`. A feature session may hold its view cache,
+`knowledge`, `memos`, `moment` or `settings`. A feature session may hold its view cache,
 request generations, event/timer cleanup, and typed command callbacks across page unmounts. Keep a
 feature's reads, tags, and mutations together; do not introduce a shared content coordinator that
 owns several features' mutable state. Rust still owns domain behavior and external I/O.
@@ -57,8 +57,7 @@ transport types, projections, and create, read, update, and delete operations to
 splitting directories by CRUD verb. Shared authentication belongs in `auth.rs` only when multiple
 providers use the same credential format and resolution policy.
 
-Stable capabilities retain their own boundaries: `cms::r2` owns object storage and `cms::build`
-owns local artifact assembly; the `markdown` crate owns general Markdown compilation, article/Memo
+Stable capabilities retain their own boundaries: the `markdown` crate owns general Markdown compilation, article/Memo
 rendering and embed provider reads; `md-dialect` owns custom fence validation and rendering from
 supplied snapshots and performs no I/O.
 

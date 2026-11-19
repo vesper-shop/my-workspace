@@ -3,20 +3,19 @@
 	import DeviceSidebar from "./lib/components/terminal/DeviceSidebar.svelte";
 	import TerminalView from "./lib/components/terminal/TerminalView.svelte";
 	import { createTerminalSession } from "./lib/components/terminal/session.svelte";
-	import ProfileEditor from "./lib/components/layout/ProfileEditor.svelte";
+	import AccountProfile from "./lib/components/layout/AccountProfile.svelte";
 	import UpdateDialog from "./lib/components/layout/UpdateDialog.svelte";
 	import LockScreen from "./lib/components/layout/LockScreen.svelte";
 	import PageSkeleton from "./lib/components/layout/PageSkeleton.svelte";
 	import { invoke } from "@tauri-apps/api/core";
 	import { listen } from "@tauri-apps/api/event";
-	import { Archive, ArrowLeft, Bell, BookOpen, CloudOff, Heart, Home, Image, LayoutDashboard, MessageCircle, Lock, Menu, Moon, Music2, Newspaper, Settings, Sun, Waypoints, X } from "@lucide/svelte";
+	import { Archive, ArrowLeft, BookOpen, CloudOff, Heart, Home, Image, LayoutDashboard, MessageCircle, Lock, Menu, Moon, Music2, Newspaper, Settings, Sun, Waypoints, X } from "@lucide/svelte";
 	import { onMount, untrack } from "svelte";
 	import MemosView from "./lib/components/pages/MemosView.svelte";
 	import MomentView from "./lib/components/pages/MomentView.svelte";
 	import MusicView from "./lib/components/pages/MusicView.svelte";
 	import MemoryView from "./lib/components/pages/MemoryView.svelte";
 	import KnowledgeView from "./lib/components/pages/KnowledgeView.svelte";
-	import InboxView from "./lib/components/pages/InboxView.svelte";
 	import NewspaperView from "./lib/components/pages/NewspaperView.svelte";
 	import { createLayoutSession } from "./lib/components/dashboard/layout.svelte";
 	import ChatView from "./lib/components/pages/ChatView.svelte";
@@ -28,7 +27,6 @@
 	import type { Channel, InitialViews } from "@/lib/contracts/content";
 	import type { TerminalTarget } from "@/lib/contracts/terminal";
 	import { createDashboardSession } from "./lib/components/dashboard/session.svelte";
-	import { createInboxSession } from "./lib/components/inbox/session.svelte";
 	import { createSettingsSession } from "./lib/components/settings/session.svelte";
 	import { createMemosSession } from "./lib/components/memos/session.svelte";
 	import { createMomentSession } from "./lib/components/moment/session.svelte";
@@ -37,7 +35,7 @@
 	import { createMemorySession } from "./lib/components/memory/session.svelte";
 	import { applyTheme, initTheme } from "./lib/theme";
 
-	type View = "chat" | "terminal" | "dashboard" | "inbox" | "memory" | "music" | "newspaper" | "settings" | Channel;
+	type View = "chat" | "terminal" | "dashboard" | "memory" | "music" | "newspaper" | "settings" | Channel;
 
 	const navigation: Array<{ id: View; label: string }> = [
 		{ id: "dashboard", label: "Dashboard" },
@@ -50,19 +48,18 @@
 		{ id: "knowledge", label: "Knowledge" },
 		{ id: "settings", label: "Settings" },
 	];
+	const defaultAvatar = new URL("./assets/pleasure1234-avatar.webp", import.meta.url).href;
 	const sidebarWidthKey = "vesper.sidebar.width";
 	const minimumSidebarWidth = 64;
 	const maximumSidebarWidth = 360;
 
 	let contentWidth = $state(0);
-	let profileAvatar = $state("");
 	let selected = $state<View>("dashboard");
 	let navigationRequest = 0;
 	let reconnectMihoyo = $state(false);
 	let musicPlayerVisible = $state(false);
 	let musicPlayerAvailable = $state(false);
 	let musicReturnView: View = "music";
-	let previousView = $state<Exclude<View, "inbox">>("dashboard");
 	let mainElement = $state<HTMLElement | null>(null);
 	const memos = createMemosSession({
 		get active() { return selected === "memos"; },
@@ -91,14 +88,13 @@
 	const chat = createChatSession();
 	const layoutSession = createLayoutSession();
 	const dashboardSession = createDashboardSession(() => selected === "dashboard");
-	const inbox = createInboxSession(() => selected === "inbox");
 	const newspaper = createNewspaperSession(() => selected === "newspaper");
 	const memory = createMemorySession();
 	const settings = createSettingsSession({
-		resetChannel: (channel) => {
-			if (channel === "memos") memos.reset();
-			else if (channel === "moment") moment.reset();
-			else knowledge.reset();
+		resetContent: () => {
+			memos.reset();
+			moment.reset();
+			knowledge.reset();
 		},
 		initializeConsumers,
 		refreshDashboard: dashboardSession.refreshDashboard,
@@ -110,12 +106,14 @@
 			case "moment":
 			case "knowledge": return configuration?.account.status === "ready";
 			case "music": return configuration?.spotify.status === "ready" || configuration?.qqMusic.status === "ready";
-			case "inbox": return configuration?.ntfy.status === "ready";
 			case "memory": return configuration?.nowledge.status === "ready";
 			default: return true;
 		}
 	}
 	const visibleNavigation = $derived(navigation.filter((item) => viewAvailable(item.id)));
+	const profileAvatar = $derived(
+		settings.configuration?.account.status === "ready" ? settings.configuration.account.data.picture ?? defaultAvatar : defaultAvatar,
+	);
 	$effect(() => {
 		if (!viewAvailable(selected)) untrack(() => { void select("dashboard"); });
 	});
@@ -137,17 +135,12 @@
 	async function select(view: View) {
 		const request = ++navigationRequest;
 		reconnectMihoyo = false;
-		if (view === "inbox") {
-			if (selected === "inbox") view = previousView;
-			else previousView = selected;
-		}
 		if (!viewAvailable(view)) view = "dashboard";
 		if (selected === "chat" && view !== "chat") await chat.leave();
 		if (request !== navigationRequest) return;
 		activeContent?.leave();
 		musicPlayerVisible = false;
 		selected = view;
-		void inbox.activate(view === "inbox");
 		if (view === "newspaper") void newspaper.refresh();
 		if (view === "memory") void memory.refresh();
 		const activation = dashboardSession.activate(view === "dashboard");
@@ -295,38 +288,19 @@
 		<DeviceSidebar session={terminals} compact={sidebarWidth < 160} active={selected === "terminal"} onopen={openTerminal} />
 
 		<div class="sidebar-footer">
-			<ProfileEditor
+			<AccountProfile
 				compact={sidebarWidth < 160}
-				email={settings.configuration?.account.status === "ready" ? settings.configuration.account.data.email : null}
-				bind:profileAvatar
+				account={settings.configuration?.account ?? null}
+				avatar={profileAvatar}
+				onswitchaccount={settings.switchAccount}
 			/>
 			<div class="footer-controls">
-				{#if viewAvailable("inbox")}
-				<div class="footer-navigation">
-					<button
-						class:active={selected === "inbox"}
-						type="button"
-						onclick={() => void select("inbox")}
-						aria-label={selected === "inbox"
-							? "Return to previous view"
-							: inbox.notifications.length > 0
-								? `Open inbox, ${inbox.notifications.length} unread notifications`
-								: "Open inbox"}
-						title={selected === "inbox" ? "Back" : "Inbox"}
-					>
-						<Bell size={15} />
-						{#if inbox.notifications.length > 0}<span class="notification-dot" aria-hidden="true"></span>{/if}
-					</button>
-				</div>
-				{/if}
-				<div class="footer-actions">
-					<button type="button" onclick={lockApp} aria-label={settings.configuration?.appLock.status === "ready" ? "Lock Vesper" : "Configure App Lock"} title={settings.configuration?.appLock.status === "ready" ? "Lock Vesper" : "Configure App Lock in Settings"}>
-						<Lock size={15} />
-					</button>
-					<button type="button" onclick={toggleTheme} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title={dark ? "Light mode" : "Dark mode"}>
-						{#if dark}<Sun size={15} />{:else}<Moon size={15} />{/if}
-					</button>
-				</div>
+				<button type="button" onclick={lockApp} aria-label={settings.configuration?.appLock.status === "ready" ? "Lock Vesper" : "Configure App Lock"} title={settings.configuration?.appLock.status === "ready" ? "Lock Vesper" : "Configure App Lock in Settings"}>
+					<Lock size={15} />
+				</button>
+				<button type="button" onclick={toggleTheme} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title={dark ? "Light mode" : "Dark mode"}>
+					{#if dark}<Sun size={15} />{:else}<Moon size={15} />{/if}
+				</button>
 			</div>
 		</div>
 		<button
@@ -375,9 +349,6 @@
 						configuration={settings.configuration}
 						error={settings.error}
 						onsaveugos={settings.saveUgosConfiguration}
-						onsaver2={settings.saveR2Configuration}
-						onswitchaccount={settings.switchAccount}
-						onsaventfy={settings.saveNtfy}
 						onsavenowledge={settings.saveNowledge}
 						onsavenotion={settings.saveNotionCalendar}
 						onsavecodexresets={settings.saveCodexResets}
@@ -386,8 +357,6 @@
 						onconnectspotify={settings.connectSpotify}
 						onconfigurationchanged={settings.loadConfiguration}
 					/>
-				{:else if selected === "inbox"}
-					<InboxView notifications={inbox.notifications} loadError={inbox.error} onread={inbox.markNotificationRead} />
 				{:else if selected === "music"}
 					{#key settings.spotifyRevision}
 						<MusicView spotifyRevision={settings.spotifyRevision} bind:playerVisible={musicPlayerVisible} bind:playerAvailable={musicPlayerAvailable} onopenplayer={openMusicPlayer} onopensettings={() => void select("settings")} />
@@ -638,23 +607,11 @@
 		display: flex;
 		flex: 0 0 auto;
 		align-items: center;
-	}
-
-	.footer-navigation,
-	.footer-actions {
-		display: flex;
-		align-items: center;
 		gap: 0.0625rem;
 	}
 
-	.footer-actions {
-		padding-left: 0.0625rem;
-	}
-
-
 	.footer-controls button,
 	.topbar button {
-		position: relative;
 		display: grid;
 		width: 1.65rem;
 		height: 1.65rem;
@@ -666,24 +623,12 @@
 		cursor: pointer;
 	}
 
-	.notification-dot {
-		position: absolute;
-		top: 0.25rem;
-		right: 0.25rem;
-		width: 0.375rem;
-		height: 0.375rem;
-		border: 1px solid var(--color-background);
-		border-radius: var(--radius-full);
-		background: var(--color-error);
-	}
-
 	.footer-controls button:hover,
 	.topbar button:hover,
 	.close-sidebar:hover {
 		background: var(--color-muted);
 		color: var(--color-foreground);
 	}
-	.footer-controls button.active { background: color-mix(in srgb, var(--color-accent) 10%, transparent); color: var(--color-accent); }
 
 	main {
 		min-width: 0;

@@ -7,7 +7,6 @@ export interface Memo {
 	content: string;
 	tags: string[];
 	createdAt: string;
-	updatedAt: string;
 	visibility: "public" | "private";
 	pinned: boolean;
 	favorite: boolean;
@@ -16,7 +15,6 @@ export interface Memo {
 
 export interface MemoView extends Memo {
 	html: string;
-	metadataComplete: boolean;
 }
 
 export type PublicationProvider = "telegram" | "x";
@@ -47,15 +45,12 @@ export type MemoUpdate =
 export interface PhotoItem {
 	id: string;
 	entryId: string;
-	url: string;
-	thumbnailUrl: string;
-	r2Key: string;
-	thumbnailR2Key: string;
+	imageKey: string;
+	thumbnailKey: string;
 	thumbHash: string | null;
 	title: string;
 	width: number;
 	height: number;
-	aspectRatio: number | null;
 	tags: string[];
 	date: string | null;
 	description: string | null;

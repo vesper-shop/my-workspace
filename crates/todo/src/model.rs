@@ -88,8 +88,6 @@ pub enum Error {
     ScheduleParse { path: PathBuf, message: String },
     #[error("Todo schedule source must be an .ics file: {0}")]
     InvalidScheduleSource(PathBuf),
-    #[error("multiple Todo schedule sources use the same file name: {0}")]
-    DuplicateScheduleName(String),
     #[error(transparent)]
     Database(#[from] database::Error),
     #[error("Todo database operation failed: {0}")]

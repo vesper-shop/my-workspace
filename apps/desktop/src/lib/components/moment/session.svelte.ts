@@ -70,7 +70,6 @@ export function createMomentSession(context: {
 				cursor: null,
 				search: null,
 				tags: [],
-				sortByUpdated: false,
 				archivedOnly: false,
 				favoritesOnly: false,
 			},

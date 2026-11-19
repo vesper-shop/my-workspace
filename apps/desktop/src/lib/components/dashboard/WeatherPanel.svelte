@@ -49,8 +49,9 @@
 	}
 
 	function forecastHour(value: string): string {
-		const time = value.split("T")[1];
-		return time?.slice(0, 5) ?? value;
+		const separator = value.indexOf("T");
+		if (separator < 0) throw new Error(`Forecast time ${value} has no clock time.`);
+		return value.slice(separator + 1, separator + 6);
 	}
 
 	onMount(() => {

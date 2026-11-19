@@ -29,7 +29,6 @@ export function createKnowledgeSession(context: {
 				cursor,
 				search: null,
 				tags: [],
-				sortByUpdated: false,
 				archivedOnly: false,
 				favoritesOnly: false,
 			},

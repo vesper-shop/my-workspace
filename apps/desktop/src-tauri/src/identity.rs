@@ -14,7 +14,7 @@ pub(crate) async fn sign_in(app: tauri::AppHandle) -> CommandResponse<String> {
         if let Some(window) = app.get_webview_window("main") {
             window.set_focus()?;
         }
-        app.state::<Content>().reset_views().await;
+        app.state::<Content>().reset().await;
         Ok::<_, CommandError>(account.email)
     };
     result.await.into()
@@ -24,7 +24,7 @@ pub(crate) async fn sign_in(app: tauri::AppHandle) -> CommandResponse<String> {
 pub(crate) async fn sign_out(app: tauri::AppHandle) -> CommandResponse<String> {
     let result = async {
         consumers::api::identity::sign_out().await?;
-        app.state::<Content>().reset_views().await;
+        app.state::<Content>().reset().await;
         Ok::<_, CommandError>("account".to_owned())
     };
     result.await.into()

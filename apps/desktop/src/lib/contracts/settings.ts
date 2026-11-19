@@ -3,11 +3,6 @@ export interface UgosConfiguration {
 	password: string;
 }
 
-export interface R2Configuration {
-	accessKeyId: string;
-	secretAccessKey: string;
-}
-
 export interface Account {
 	email: string;
 	name: string;
@@ -20,11 +15,6 @@ export interface CodexResets {
 
 export interface NotionCalendar {
 	viewUrl: string;
-}
-
-export interface NtfyConfig {
-	token: string;
-	development: boolean;
 }
 
 export interface NowledgeCredentials {
@@ -48,10 +38,7 @@ export type StoredConfiguration<T> = { status: "missing" } | { status: "ready"; 
 
 export interface ConfigurationStatus {
 	ugos: StoredConfiguration<UgosConfiguration>;
-	r2: StoredConfiguration<R2Configuration>;
 	account: StoredConfiguration<Account>;
-	ntfy: StoredConfiguration<NtfyConfig>;
-	ntfyDev: boolean;
 	notionCalendar: StoredConfiguration<NotionCalendar>;
 	codexResets: CodexResets;
 	appLock: StoredConfiguration<string>;

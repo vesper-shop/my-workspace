@@ -1,10 +1,9 @@
-use super::{ApiError, Client, send};
+use super::{ApiError, Client, VESPER_API, resource_url, send};
 use futures_util::future::try_join_all;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-const ENDPOINT: &str = "https://noted-this.date/api";
 pub const PAGE_SIZE: usize = 50;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -38,7 +37,6 @@ pub struct Memo {
     pub content: String,
     pub tags: Vec<String>,
     pub created_at: String,
-    pub updated_at: String,
     pub visibility: Visibility,
     pub pinned: bool,
     pub favorite: bool,
@@ -51,7 +49,6 @@ pub struct MemoView {
     #[serde(flatten)]
     pub memo: Memo,
     pub html: String,
-    pub metadata_complete: bool,
 }
 
 #[derive(Serialize)]
@@ -63,10 +60,8 @@ pub struct Page {
 
 #[derive(Default)]
 pub struct ListFilters {
-    pub limit: Option<usize>,
     pub search: Option<String>,
     pub tags: Vec<String>,
-    pub sort_by_updated: bool,
     pub archived_only: bool,
     pub favorites_only: bool,
 }
@@ -163,14 +158,12 @@ impl Document {
         let Document { meta, body } = self;
         let content = with_tags(&body, &meta.tags);
         MemoView {
-            metadata_complete: true,
             html: markdown::render_memo(&strip_tags(&content)),
             memo: Memo {
                 id: meta.id,
                 content,
                 tags: meta.tags,
-                created_at: meta.occurred.clone(),
-                updated_at: meta.occurred,
+                created_at: meta.occurred,
                 visibility: meta.visibility,
                 pinned: meta.pinned.is_some(),
                 favorite: meta.favorite.is_some(),
@@ -222,19 +215,6 @@ pub fn extract_tags(content: &str) -> Vec<String> {
     tags
 }
 
-fn entry_url(id: &str) -> Result<reqwest::Url, ApiError> {
-    if id.trim().is_empty() {
-        return Err(ApiError::Protocol("a memo ID is required".to_owned()));
-    }
-    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/entries/"))
-        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
-    url.path_segments_mut()
-        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
-        .pop_if_empty()
-        .push(id);
-    Ok(url)
-}
-
 fn shelf(filters: &ListFilters) -> &'static str {
     if filters.archived_only {
         "archive"
@@ -264,7 +244,7 @@ pub async fn list(cursor: Option<String>, filters: &ListFilters) -> Result<Page,
             let response = send(
                 client
                     .http
-                    .get(format!("{ENDPOINT}/entries"))
+                    .get(format!("{VESPER_API}/entries"))
                     .bearer_auth(&client.token)
                     .query(&query),
                 "search memos",
@@ -284,7 +264,7 @@ pub async fn list(cursor: Option<String>, filters: &ListFilters) -> Result<Page,
             let response = send(
                 client
                     .http
-                    .get(format!("{ENDPOINT}/entries/documents"))
+                    .get(format!("{VESPER_API}/entries/documents"))
                     .bearer_auth(&client.token)
                     .query(&query),
                 "list memos",
@@ -317,7 +297,10 @@ pub async fn list(cursor: Option<String>, filters: &ListFilters) -> Result<Page,
 
 async fn fetch(client: &Client, id: &str) -> Result<Document, ApiError> {
     let response = send(
-        client.http.get(entry_url(id)?).bearer_auth(&client.token),
+        client
+            .http
+            .get(resource_url("entries", id)?)
+            .bearer_auth(&client.token),
         "read memo",
     )
     .await?;
@@ -334,7 +317,7 @@ pub async fn tags() -> Result<Vec<TagCount>, ApiError> {
     let response = send(
         client
             .http
-            .get(format!("{ENDPOINT}/tags"))
+            .get(format!("{VESPER_API}/tags"))
             .bearer_auth(&client.token),
         "list memo tags",
     )
@@ -356,7 +339,7 @@ async fn submit(
     let response = send(
         client
             .http
-            .post(format!("{ENDPOINT}/entries"))
+            .post(format!("{VESPER_API}/entries"))
             .bearer_auth(&client.token)
             .json(&json!({
                 "body": body_of(content),
@@ -395,7 +378,7 @@ pub async fn import_x(source_url: &str, visibility: Visibility) -> Result<MemoVi
 }
 
 pub async fn update(id: &str, input: &Update) -> Result<MemoView, ApiError> {
-    let url = entry_url(id)?;
+    let url = resource_url("entries", id)?;
     let client = Client::load().await?;
     let tags = match (&input.content, &input.tags) {
         (_, Some(tags)) if !tags.is_empty() => Some(tags.clone()),
@@ -422,7 +405,7 @@ pub async fn update(id: &str, input: &Update) -> Result<MemoView, ApiError> {
 }
 
 pub async fn delete(id: &str) -> Result<(), ApiError> {
-    let url = entry_url(id)?;
+    let url = resource_url("entries", id)?;
     let client = Client::load().await?;
     send(
         client.http.delete(url).bearer_auth(&client.token),
@@ -601,12 +584,10 @@ mod tests {
 
     #[test]
     fn encodes_entry_ids() {
-        assert_eq!(entry_url("item").unwrap().path(), "/api/entries/item");
-        assert_eq!(
-            entry_url("../settings").unwrap().path(),
-            "/api/entries/..%2Fsettings"
-        );
-        assert_eq!(entry_url("a b").unwrap().path(), "/api/entries/a%20b");
+        let path = |id| resource_url("entries", id).unwrap().path().to_owned();
+        assert_eq!(path("item"), "/api/entries/item");
+        assert_eq!(path("../settings"), "/api/entries/..%2Fsettings");
+        assert_eq!(path("a b"), "/api/entries/a%20b");
     }
 
     #[tokio::test]
@@ -652,10 +633,6 @@ mod tests {
         assert_eq!(view.memo.content, "Complete API body\n\n#rust");
         assert!(view.memo.favorite && !view.memo.pinned);
         assert!(view.html.contains("Complete API body"));
-        assert_eq!(
-            serde_json::to_value(&view).unwrap()["metadataComplete"],
-            true
-        );
     }
 
     #[test]

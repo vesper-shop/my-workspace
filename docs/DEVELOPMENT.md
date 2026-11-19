@@ -5,7 +5,7 @@
 Use Rust `1.95` or newer, Node.js `^22.18.0 || ^24.11.0 || >=26.0.0`,
 pnpm `12.6.0` (pinned in `package.json`), and the platform
 build dependencies required by Tauri v2. The desktop app requires macOS 12 or newer on Mac.
-R2 access is needed for publication and optional for Moment, which otherwise reads public images and uploads through its API; UGOS requires Tailscale with MagicDNS.
+UGOS requires Tailscale with MagicDNS.
 
 ## Root commands
 
@@ -61,27 +61,23 @@ to Keychain. Storage, locking, and backup rules belong to [Persistence](PERSISTE
 
 | Configuration                                                | Debug source                                                |
 | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| UGOS, R2, ntfy                                               | Process environment / root `.env`                           |
+| UGOS                                                         | Process environment / root `.env`                           |
 | App Lock, Telegram configuration                             | Environment, then database                                  |
 | X, music, miHoYo, Skland, Notion view link, certificate pins | Database                                                    |
 | Steam                                                        | Complete `STEAM_API_KEY` and `STEAM_ID` pair, then database |
 | CherryIN                                                     | Existing Cherry Studio OAuth session                        |
 
 Copy needed entries from [`.env.example`](../.env.example) into the ignored root `.env`.
-Desktop and CLI load it in debug builds; inherited variables take precedence. Feature
+The desktop loads it in debug builds; inherited variables take precedence. Feature
 `credentials` modules read overrides through `vault::variables`, so empty values and incomplete
 groups fail validation. Settings writes the database, never `.env` or the environment;
 restart after changing an overriding environment value. Define only features under development.
 
-On macOS, release credentials share Keychain service `me.you-find.vesper`, account `credentials`.
-Each process caches one credential snapshot; unchanged saves do not write Keychain or invalidate
-other processes. A new CLI process still reads Keychain once. “Always Allow” authorizes the current
-program identity; ad-hoc updates change that identity and may require renewed authorization.
-Keychain also checks the item's partition list: trusting the CLI in the application list does not
-resolve a partition list that permits only the desktop's code hash. Repeated prompts for an unchanged
-binary require checking both controls. Repair only this service/account with macOS `security`
-using the installed applications' code hashes; never authorize all tools or pass a Keychain password
-on the command line. Stable signed identities are needed for authorization to survive binary updates.
+On macOS, release credentials live in one Keychain item: service `me.you-find.vesper`, account
+`credentials`. The app reads it once per launch and caches it in memory; unchanged saves do not write
+Keychain. “Always Allow” authorizes the current program identity; ad-hoc updates change that
+identity and may require renewed authorization, so stable signed identities are needed for
+authorization to survive binary updates. Never pass a Keychain password on the command line.
 Browser and QR login do not require copied session tokens. Codex, pi, and Claude integrations retain
 their existing CLI authentication. Claude reads its existing macOS Keychain item through
 `/usr/bin/security` in debug and release builds; this is separate from Vesper's credential store.
@@ -95,9 +91,8 @@ remain outside Vesper; App Lock verification stays in Rust.
 
 ## Service setup
 
-Settings accepts bucket-scoped R2 credentials and separate Bearer keys generated in my-memos,
-my-moment, and my-knowledge. Memo and Knowledge use their APIs; direct R2 access cannot bypass
-server metadata and cache coordination.
+Memos, Moment and Knowledge need one Vesper sign-in from the sidebar profile; Memos and Moment use
+Vesper's APIs and my-knowledge accepts the same Vesper token.
 
 Chat requires a system installation of `@earendil-works/pi-coding-agent` with RPC support. Install
 and authenticate Pi outside this workspace; Vesper packages no Pi npm dependency. The current
@@ -126,10 +121,6 @@ reload/close and shutdown end both process runtimes.
 Dynamic Island starts hidden on each launch. Dashboard Edit displays it only after a widget is pinned
 and Show Dynamic Island is selected. Hide retains the saved layout and pin.
 
-For ntfy, save a token with read access to `mail-summary`. Vesper consumes the fixed
-`https://ntfy.you-find.me/mail-summary/sse` endpoint only while Inbox is active. It does not configure
-producers; retention and availability remain the self-hosted server's responsibility.
-
 For CherryIN, sign in through Cherry Studio. Vesper reuses and refreshes that session; reconnect
 there if its refresh grant is rejected. UGOS setup belongs to [UGOS](UGOS.md#connection-and-login),
 and game authorization to [Games](GAMES.md#authorization-and-account-selection).
@@ -152,8 +143,8 @@ Rust stores and rotates the grants. The UI accepts no Client Secret or manually 
 
 ## Notion calendar
 
-Install the official `ntn` CLI and run `ntn login`. Save the view link, including `?v=...`, in Settings
-or run `vesper todo notion connect <view-url>`. Table views need exactly one Date property.
+Install the official `ntn` CLI and run `ntn login`. Save the view link, including `?v=...`, in Settings.
+Table views need exactly one Date property.
 Clear the link to disconnect. Desktop finds `ntn` on PATH or in `~/.local/bin`, `/opt/homebrew/bin`,
 and `/usr/local/bin`. Vesper stores the view link; `ntn` owns login, and task completion stays local.
 
@@ -215,10 +206,6 @@ Rust coverage requires `cargo install cargo-llvm-cov --locked` and
 `rustup component add llvm-tools-preview`. Its first run builds separate instrumented artifacts.
 Stable Rust coverage excludes branch coverage, doctests, and ignored live tests. Neither command
 sets a coverage threshold; passing coverage tests does not establish live-provider or native UI correctness.
-
-On macOS, `cargo run -p vesper --example cookie_probe` checks native WebView domain-cookie behavior;
-`cargo run -p vesper --example captcha_probe` checks the production page-to-native proof callback.
-Both require a desktop session and use synthetic inputs without credentials or game API requests.
 
 Apply the independent [review process](STYLEGUIDE.md#review) to non-trivial behavior and boundaries.
 Handoff records commands actually run, before/after evidence, unresolved cases, and untested environments.

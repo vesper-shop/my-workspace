@@ -12,7 +12,7 @@
 	let editing = $state(false);
 	let pending = $state(true);
 	let preview = $state<string | null>(null);
-	let error = $state("");
+	let error = $state<string | null>(null);
 	let revision = $state(0);
 	// ProseMirror owns this contentDOM; Svelte owns only its empty host.
 	onMount(() => { host?.append(content); });
@@ -22,7 +22,7 @@
 		let active = true;
 		pending = true;
 		preview = null;
-		error = "";
+		error = null;
 		const timer = setTimeout(() => {
 			void invoke<CommandResponse<string>>("preview_knowledge", { source: text, context: context() }).then(
 				(response) => {
@@ -54,9 +54,9 @@
 	</div>
 	<div class="block-source" hidden={!editing} bind:this={host}></div>
 	{#if !editing}
-		<div contenteditable="false" class="block-preview knowledge-prose" use:mediaPlayers={preview ?? ""} use:openArticleLinks={{ onError: (message) => { error = message ?? ""; }, onOpen: () => "Finish or cancel this draft before opening another article." }}>
+		<div contenteditable="false" class="block-preview knowledge-prose" use:mediaPlayers={preview} use:openArticleLinks={{ onError: (message) => { error = message; }, onOpen: () => "Finish or cancel this draft before opening another article." }}>
 			{#if pending}<p role="status">Compiling block…</p>
-			{:else if error}<p class="block-error" role="alert">{error}</p>
+			{:else if error !== null}<p class="block-error" role="alert">{error}</p>
 			{:else if preview}{@html preview}{/if}
 		</div>
 	{/if}

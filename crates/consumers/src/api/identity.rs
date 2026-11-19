@@ -126,7 +126,6 @@ pub async fn sign_in(authorization: Authorization) -> Result<Account, ApiError> 
         picture: workspace.profile.image,
     };
     let mut access = ACCESS.lock().await;
-    let _lock = vault::lock(VAULT_ACCOUNT)?;
     vault::save_json(
         VAULT_ACCOUNT,
         &Session {
@@ -151,7 +150,6 @@ pub fn account() -> Result<Stored<Account>, ApiError> {
 pub async fn sign_out() -> Result<(), ApiError> {
     let stored = {
         let mut access = ACCESS.lock().await;
-        let _lock = vault::lock(VAULT_ACCOUNT)?;
         let stored = vault::read_json::<Session>(VAULT_ACCOUNT)?;
         vault::delete(VAULT_ACCOUNT)?;
         *access = None;
@@ -183,7 +181,6 @@ pub(crate) async fn access_token() -> Result<String, ApiError> {
     {
         return Ok(current.token.clone());
     }
-    let _lock = vault::lock(VAULT_ACCOUNT)?;
     let Stored::Ready(session) = vault::read_json::<Session>(VAULT_ACCOUNT)? else {
         return Err(ApiError::SignedOut);
     };

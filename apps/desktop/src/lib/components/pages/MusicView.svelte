@@ -69,11 +69,12 @@
 		if (lyricsError !== null) return lyricsError;
 		if (lyrics?.instrumental) return "Instrumental";
 		if (lyrics === null || lyrics.lines.length === 0) return "Lyrics unavailable";
-		if (lyrics.synced) return activeLine < 0 ? "…" : lyrics.lines[activeLine]!.text;
 		const duration = selectedTrack === null ? 0 : selectedTrack.durationMs;
 		const ratio = duration > 0 ? Math.min(1, progressMs / duration) : 0;
-		const index = Math.min(lyrics.lines.length - 1, Math.floor(ratio * lyrics.lines.length));
-		return lyrics.lines[index]!.text;
+		const index = lyrics.synced ? activeLine : Math.min(lyrics.lines.length - 1, Math.floor(ratio * lyrics.lines.length));
+		if (index < 0) return "…";
+		for (const [position, line] of lyrics.lines.entries()) if (position === index) return line.text;
+		throw new Error("Lyric line is out of range.");
 	});
 
 	function coverSource(track: MusicTrack): string | null {

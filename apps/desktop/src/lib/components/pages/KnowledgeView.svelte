@@ -11,7 +11,7 @@
 	let draftSource = $state("");
 	let draftVisibility = $state<KnowledgeDocument["visibility"]>("public");
 	let saving = $state(false);
-	let error = $state("");
+	let error = $state<string | null>(null);
 
 	export function selectKnowledgeArticle(document: KnowledgeDocument, fragment = ""): string | null {
 		if (editing || saving) return "Finish or cancel the current article draft before opening another article.";
@@ -48,8 +48,8 @@
 		if (!destination || !articleElement || articleElement.dataset.articleId !== destination.id) return;
 		let fragment = destination.fragment;
 		try { fragment = decodeURIComponent(fragment); } catch { /* Malformed fragments can still match a literal heading ID. */ }
-		const heading = fragment ? Array.from(articleElement.querySelectorAll<HTMLElement>("[id]")).find((element) => element.id === fragment) : undefined;
-		if (heading) heading.scrollIntoView({ behavior: "instant", block: "start" });
+		const heading = fragment ? articleElement.querySelector(`#${CSS.escape(fragment)}`) : null;
+		if (heading !== null) heading.scrollIntoView({ behavior: "instant", block: "start" });
 		else articleElement.closest("main")?.scrollTo({ top: 0, behavior: "instant" });
 		destination = null;
 	});
@@ -137,12 +137,12 @@
 	async function openEntry(entry: KnowledgeEntry) {
 		const request = ++readRequest;
 		openingId = entry.id;
-		error = "";
+		error = null;
 		const response = await onread(entry.id, entry.contentHash);
 		if (request !== readRequest) return;
 		openingId = null;
 		if (response.status === "failed") { error = response.message; return; }
-		error = selectKnowledgeArticle(response.data) ?? "";
+		error = selectKnowledgeArticle(response.data);
 		linkError = null;
 	}
 
@@ -155,7 +155,7 @@
 		draftTags = "";
 		draftSource = "";
 		draftVisibility = "public";
-		error = "";
+		error = null;
 		editing = true;
 	}
 
@@ -165,13 +165,13 @@
 		draftTags = document.tags.join(", ");
 		draftSource = document.source;
 		draftVisibility = document.visibility;
-		error = "";
+		error = null;
 		editing = true;
 	}
 
 	function cancelEdit() {
 		editing = false;
-		error = "";
+		error = null;
 	}
 
 	function parsedTags() {
@@ -203,7 +203,7 @@
 			return;
 		}
 		saving = true;
-		error = "";
+		error = null;
 		const input: KnowledgeDraft = {
 			title,
 			summary,
@@ -231,7 +231,7 @@
 			<div><h1>{selected ? "Edit knowledge" : "New knowledge"}</h1><p class="page-description">Write and edit your knowledge.</p></div>
 			<div class="editor-actions"><button disabled={saving} onclick={cancelEdit}>Cancel</button><button class="save" disabled={saving} onclick={save}>{saving ? "Saving..." : "Save"}</button></div>
 		</header>
-		{#if error}<p class="editor-error" role="alert">{error}</p>{/if}
+		{#if error !== null}<p class="editor-error" role="alert">{error}</p>{/if}
 		<div class="fields">
 			<label>Title<input bind:value={draftTitle} maxlength="240" placeholder="Untitled knowledge" /></label>
 			<label>Summary<input bind:value={draftSummary} maxlength="500" placeholder="A short summary" /></label>
@@ -268,7 +268,7 @@
 			<button onclick={startNew}><Plus size={12} /> New article</button>
 		</header>
 
-		{#if error}<p role="alert">{error}</p>{/if}
+		{#if error !== null}<p role="alert">{error}</p>{/if}
 		{#each groups as group (group.year)}
 			<section class="year">
 				<h2>{group.year} <small>{group.count} entries</small></h2>

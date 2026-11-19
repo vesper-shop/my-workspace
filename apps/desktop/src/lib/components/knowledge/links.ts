@@ -4,6 +4,15 @@ import type { KnowledgeDocument } from "@/lib/contracts/content";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 // Desktop routes carry IDs; Rust extracts article IDs from canonical web URLs.
+const articlePrefix = "/articles/";
+const articlePath = /^\/articles\/[^/?#]+(?:#\S*)?$/;
+
+function articleId(href: string): string | null {
+	if (!articlePath.test(href)) return null;
+	const hash = href.indexOf("#");
+	return href.slice(articlePrefix.length, hash < 0 ? href.length : hash);
+}
+
 type ArticleNavigation = {
 	onError: (message: string | null) => void;
 	onOpen: (document: KnowledgeDocument, fragment?: string) => string | null;
@@ -25,18 +34,15 @@ export function openArticleLinks(node: HTMLElement, navigation: ArticleNavigatio
 		event.preventDefault();
 		const request = ++generation;
 		navigation.onError(null);
-		const article = /^\/articles\/([^/?#]+)(?:#[^\s]*)?$/.exec(href);
 		const cardUrl =
 			anchor.classList.contains("content-embed-article") &&
 			URL.canParse(href) &&
 			new URL(href).origin === "https://knowledge.you-find.me"
 				? href
 				: null;
-		if (article !== null || cardUrl !== null) {
-			void invoke<CommandResponse<KnowledgeDocument>>("read_knowledge", {
-				id: cardUrl ?? article?.[1],
-				expectedHash: null,
-			})
+		const id = cardUrl === null ? articleId(href) : cardUrl;
+		if (id !== null) {
+			void invoke<CommandResponse<KnowledgeDocument>>("read_knowledge", { id, expectedHash: null })
 				.then((response) => {
 					if (request !== generation) return;
 					if (response.status === "failed") navigation.onError(response.message);
@@ -93,12 +99,13 @@ export function preloadArticles(node: HTMLElement, visible = false) {
 		for (const target of queue) {
 			if (active >= 2) break;
 			queue.delete(target);
-			if (!node.contains(target)) continue;
+			const id = target.getAttribute("data-knowledge-id");
+			if (id === null || !node.contains(target)) continue;
 			observer?.unobserve(target);
 			active++;
 			void invoke("prefetch_knowledge", {
-				id: target.dataset.knowledgeId,
-				expectedHash: target.dataset.contentHash ?? null,
+				id,
+				expectedHash: target.getAttribute("data-content-hash"),
 			})
 				.catch(() => {})
 				.finally(() => {
@@ -107,22 +114,21 @@ export function preloadArticles(node: HTMLElement, visible = false) {
 				});
 		}
 	}
-	const observer =
-		visible && typeof IntersectionObserver !== "undefined"
-			? new IntersectionObserver(
-					(entries) => {
-						for (const entry of entries) {
-							if (entry.isIntersecting && entry.target instanceof HTMLElement) {
-								queue.add(entry.target);
-							} else if (entry.target instanceof HTMLElement) {
-								queue.delete(entry.target);
-							}
+	const observer = visible
+		? new IntersectionObserver(
+				(entries) => {
+					for (const entry of entries) {
+						if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+							queue.add(entry.target);
+						} else if (entry.target instanceof HTMLElement) {
+							queue.delete(entry.target);
 						}
-						drain();
-					},
-					{ rootMargin: "120px" },
-				)
-			: null;
+					}
+					drain();
+				},
+				{ rootMargin: "120px" },
+			)
+		: null;
 	function observe() {
 		for (const target of node.querySelectorAll("[data-knowledge-id]")) {
 			if (!observed.has(target)) {
@@ -134,22 +140,22 @@ export function preloadArticles(node: HTMLElement, visible = false) {
 	const mutations = observer === null ? null : new MutationObserver(observe);
 	mutations?.observe(node, { childList: true, subtree: true });
 	observe();
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timer: number | null = null;
 	function cancel() {
-		if (timer !== null) clearTimeout(timer);
+		if (timer !== null) window.clearTimeout(timer);
 		timer = null;
 	}
 	function preload(event: Event) {
 		if (!(event.target instanceof Element)) return;
-		const target = event.target.closest<HTMLElement>("[data-knowledge-id], a");
-		if (target === null || !node.contains(target)) return;
-		const id =
-			target.dataset.knowledgeId ??
-			/^\/articles\/([^/?#]+)(?:#[^\s]*)?$/.exec(target.getAttribute("href") ?? "")?.[1];
-		if (!id) return;
+		const target = event.target.closest("[data-knowledge-id], a");
+		if (!(target instanceof HTMLElement) || !node.contains(target)) return;
+		const knowledgeId = target.getAttribute("data-knowledge-id");
+		const href = target.getAttribute("href");
+		const id = knowledgeId === null && href !== null ? articleId(href) : knowledgeId;
+		if (id === null) return;
+		const expectedHash = target.getAttribute("data-content-hash");
 		cancel();
-		const expectedHash = target.dataset.contentHash ?? null;
-		timer = setTimeout(
+		timer = window.setTimeout(
 			() => {
 				timer = null;
 				// Speculation is optional; an explicit click retries and reports errors.

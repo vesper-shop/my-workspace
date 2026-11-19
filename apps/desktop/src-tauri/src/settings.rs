@@ -1,4 +1,3 @@
-use crate::content::Content;
 use crate::{CommandError, CommandResponse};
 use tauri::Manager;
 use vault::Stored;
@@ -7,10 +6,7 @@ use vault::Stored;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Configuration {
     ugos: Saved<ugos::credentials::Credentials>,
-    r2: Saved<R2Configuration>,
     account: Saved<consumers::api::identity::Account>,
-    ntfy: Saved<inbox::credentials::Credentials>,
-    ntfy_dev: bool,
     codex_resets: ::todo::Subscription,
     notion_calendar: Saved<::todo::notion::configuration::Configuration>,
     app_lock: Saved<String>,
@@ -38,26 +34,10 @@ impl<T> From<Stored<T>> for Saved<T> {
     }
 }
 
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct R2Configuration {
-    access_key_id: String,
-    secret_access_key: String,
-}
-
 #[tauri::command]
 pub(crate) async fn read_configuration(app: tauri::AppHandle) -> CommandResponse<Configuration> {
     let result = async {
-        let r2 = match ::cms::r2::credentials::read()? {
-            Stored::Ready(credentials) => Saved::Ready(R2Configuration {
-                access_key_id: credentials.access_key_id,
-                secret_access_key: credentials.secret_access_key,
-            }),
-            Stored::Missing => Saved::Missing,
-        };
         let account = consumers::api::identity::account()?.into();
-        let ntfy: Saved<_> = inbox::credentials::read()?.into();
-        let ntfy_dev = matches!(&ntfy, Saved::Ready(credentials) if credentials.development);
         let (app_lock, app_lock_dev) = match crate::app_lock::read()? {
             Stored::Ready(password) => (Saved::Ready(password.value), password.development),
             Stored::Missing => (Saved::Missing, false),
@@ -74,10 +54,7 @@ pub(crate) async fn read_configuration(app: tauri::AppHandle) -> CommandResponse
         };
         Ok::<_, CommandError>(Configuration {
             ugos: ugos::credentials::read()?.into(),
-            r2,
             account,
-            ntfy,
-            ntfy_dev,
             codex_resets: app.state::<::todo::Store>().read_codex().await?,
             notion_calendar: ::todo::notion::configuration::read()?.into(),
             app_lock,
@@ -88,19 +65,6 @@ pub(crate) async fn read_configuration(app: tauri::AppHandle) -> CommandResponse
             telegram: social::telegram::credentials::read()?.into(),
             nowledge: nowledge::credentials::read()?.into(),
         })
-    };
-    result.await.into()
-}
-
-#[tauri::command]
-pub(crate) async fn save_ntfy_configuration(
-    configuration: inbox::credentials::Credentials,
-    app: tauri::AppHandle,
-) -> CommandResponse<String> {
-    let result = async {
-        inbox::credentials::save(configuration)?;
-        crate::inbox::restart(&app).await?;
-        Ok::<_, CommandError>("ntfy-notifications".to_owned())
     };
     result.await.into()
 }
@@ -118,20 +82,6 @@ pub(crate) fn save_ugos_configuration(
     password: String,
 ) -> CommandResponse<String> {
     CommandResponse::from(ugos::configure(username, password).map(|()| "ugos".to_owned()))
-}
-
-#[tauri::command]
-pub(crate) async fn save_r2_configuration(
-    access_key_id: String,
-    secret_access_key: String,
-    app: tauri::AppHandle,
-) -> CommandResponse<String> {
-    let result = async {
-        ::cms::r2::configure(access_key_id, secret_access_key)?;
-        app.state::<Content>().reset().await;
-        Ok::<_, CommandError>("r2".to_owned())
-    };
-    result.await.into()
 }
 
 #[tauri::command]

@@ -108,12 +108,11 @@ while explicit selections remain selected. Writes retain their submitted date; s
 cannot replace a newer selection, and cross-window events invalidate affected projections.
 
 Tasks support titles up to 120 characters and descriptions up to 4,000. Unfinished manual tasks,
-ICS imports, and carried local follow-ups support local editing and deletion. Live Notion and Codex
+ICS occurrences, and carried local follow-ups support local editing and deletion. Live Notion and Codex
 projections keep source-owned titles and descriptions; deleting them only suppresses the dated local
 projection. Completed tasks must be reopened before editing, deleting, or changing carry-forward.
 Completion and ordering remain local. Mutations check source ownership and completion against
-stored state inside the transaction. Stale reorder membership fails atomically. Desktop and CLI
-calendar reads use the existing carry-forward operation with the actual local day.
+stored state inside the transaction. Stale reorder membership fails atomically. Calendar reads use the existing carry-forward operation with the actual local day.
 
 Opt-in carry-forward moves unfinished tasks to the actual local day until completion or opt-out,
 catching up after downtime. Remote events become one local follow-up retaining original metadata;
@@ -126,8 +125,7 @@ fetching all remote dates or persisting another completion flag. See [Persistenc
 
 ### Calendar sources
 
-ICS synchronization reads local `ics/` files. Imports validate all files before atomic per-file
-installation. Recurrence identities deduplicate and suppress deleted occurrences. Imported
+ICS synchronization reads `.ics` files placed in the local `ics/` directory. Recurrence identities deduplicate and suppress deleted occurrences. Imported
 occurrences become local tasks: title and description edits persist across resynchronization and
 restart, while original calendar metadata remains attached. Replacing a file does not overwrite already imported occurrences.
 Floating times stay local; UTC and IANA TZID times use the device zone. `icalendar` parses folded
@@ -180,13 +178,6 @@ verification, account binding, and archive protocols are maintained in [Games](G
 NAS polling requires an active Dashboard and a saved UGREEN widget. Device widgets do not enable it.
 [UGOS Pro](UGOS.md) owns authentication, certificate trust, metrics, and failure behavior. Errors strip
 request URLs that can contain session tokens.
-
-## ntfy notifications
-
-Inbox independently activates Rust SSE only on its active route with a configured read token.
-The fixed source is `https://ntfy.you-find.me/mail-summary`; Vesper does not configure producers.
-Reconnect uses `since=<last-id>` and retains the newest 200 messages locally. Leaving Inbox cancels
-the stream and reconnect loop. Replays populate Inbox without producing new system notifications.
 
 ## AI usage providers
 

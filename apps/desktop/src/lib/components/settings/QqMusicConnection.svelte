@@ -16,7 +16,7 @@
 	let qqStatus = $state<"waiting" | "scanned" | "expired">("waiting");
 	let generation = 0;
 	let disposed = false;
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timer: number | null = null;
 
 	async function begin() {
 		if (starting || cancelling || disposed || qqQr !== null) return;
@@ -32,7 +32,7 @@
 		await tick();
 		if (disposed || version !== generation) return;
 		qqDialog?.focus();
-		timer = setTimeout(() => void poll(version), 1_500);
+		timer = window.setTimeout(() => void poll(version), 1_500);
 	}
 
 	async function poll(version: number) {
@@ -46,12 +46,12 @@
 			return;
 		}
 		qqStatus = response.data.status;
-		if (qqStatus !== "expired") timer = setTimeout(() => void poll(version), 1_500);
+		if (qqStatus !== "expired") timer = window.setTimeout(() => void poll(version), 1_500);
 	}
 
 	async function close() {
 		++generation;
-		if (timer !== null) clearTimeout(timer);
+		if (timer !== null) window.clearTimeout(timer);
 		qqQr = null;
 		starting = false;
 		cancelling = true;
@@ -64,7 +64,7 @@
 	onDestroy(() => {
 		disposed = true;
 		++generation;
-		if (timer !== null) clearTimeout(timer);
+		if (timer !== null) window.clearTimeout(timer);
 		if (starting || qqQr !== null) void invoke<CommandResponse<null>>("cancel_qq_login");
 	});
 </script>

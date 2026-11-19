@@ -4,7 +4,7 @@ use crate::{Details, Error, Item, List, MAX_TEXT_LENGTH, parse_date, validate_da
 use calendar::CalendarCache;
 use diesel::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 diesel::table! {
     todo_sources (name) {
@@ -76,10 +76,6 @@ impl Store {
             .join(database::APP_ID)
             .join("ics");
         Ok(store)
-    }
-
-    pub fn database_path(&self) -> &Path {
-        &self.path
     }
 
     pub(crate) async fn transaction<T: Send + 'static>(

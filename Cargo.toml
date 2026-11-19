@@ -1,12 +1,10 @@
 [workspace]
 members = [
   "apps/desktop/src-tauri",
-  "crates/cms",
   "crates/consumers",
   "crates/dashboard",
   "crates/database",
   "crates/games",
-  "crates/inbox",
   "crates/github",
   "crates/ledger",
   "crates/link-preview",
@@ -43,16 +41,6 @@ httparse = "1.10"
 oauth = { path = "crates/oauth" }
 regex = "1.13.1"
 url = "2.5"
-aws-config = { version = "1", default-features = false, features = [
-  "default-https-client",
-  "rt-tokio",
-] }
-aws-credential-types = "1"
-aws-sdk-s3 = { version = "1", default-features = false, features = [
-  "default-https-client",
-  "rt-tokio",
-] }
-aws-types = "1"
 base64 = "0.23"
 der = "0.8"
 dotenvy = "0.15"
@@ -66,11 +54,9 @@ database = { path = "crates/database" }
 futures-util = "0.3"
 grammers-client = "0.12"
 grammers-session = { version = "0.12", default-features = false, features = ["serde"] }
-cms = { path = "crates/cms" }
 consumers = { path = "crates/consumers" }
 games = { path = "crates/games" }
 hmac = "0.13"
-inbox = { path = "crates/inbox" }
 md-5 = "0.11"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 markdown = { path = "crates/markdown" }
@@ -91,7 +77,6 @@ jiff = "0.2.35"
 kamadak-exif = "0.6.1"
 keyring = "4.2.0"
 linkify = "0.11"
-mermaid-svg = "0.7.0"
 github = { path = "crates/github" }
 link-preview = { path = "crates/link-preview" }
 market-data = { path = "crates/market-data" }
@@ -128,12 +113,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 openssl = { version = "0.10", features = ["vendored"] }
 percent-encoding = "2.3"
 portable-pty = "0.9"
-mime_guess = "2.0"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
 sysinfo = "0.40"
 svg-hush = "0.9.7"
 tempfile = "3"
@@ -155,6 +138,11 @@ ugos = { path = "crates/ugos" }
 vault = { path = "crates/vault" }
 time = { version = "0.3", features = ["formatting", "local-offset", "macros", "parsing"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
 
 # Keep build-time dylibs loadable with the macOS 27 linker (rust-lang/rust#157750).
 [profile.release.build-override]

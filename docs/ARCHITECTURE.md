@@ -1,22 +1,20 @@
 # Architecture
 
-Vesper is a local-first desktop and CLI workspace. A trusted device owns authoring, credentials,
-compilation and application execution. Remote consumer APIs own published content; Cloudflare R2
-stores artifacts. This repository does not host a cloud application backend.
+Vesper is a local-first desktop workspace. A trusted device owns authoring, credentials,
+compilation and application execution. Remote consumer APIs own published content and media. This
+repository does not host a cloud application backend.
 
 ## Repository layout
 
 | Path                    | Responsibility                                                        |
 | ----------------------- | --------------------------------------------------------------------- |
 | `apps/desktop`          | Tauri v2 shell, Svelte 5 views and Rust command adapters              |
-| `crates/cms`            | Content builds, publication and R2 object storage                     |
 | `crates/markdown`       | Markdown compilation for publications, Knowledge, Memos and chat      |
 | `crates/md-dialect`     | Custom fence and shortcode validation and rendering, without I/O      |
 | `crates/consumers`      | Memo, Moment and Knowledge APIs and projections                       |
 | `crates/database`       | Application identifier, Diesel/SQLite path, connection, schema, dates |
 | `crates/vault`          | Generic credential storage and development overrides                  |
 | `crates/dashboard`      | Dashboard widget layout records, validation and source selection      |
-| `crates/inbox`          | ntfy mail-summary subscription and notification records               |
 | `crates/social`         | Telegram Channel and X publication                                    |
 | `crates/todo`           | Tasks, habits, ICS, Notion and Codex Resets calendar sources          |
 | `crates/ledger`         | Local GBP expenses and monthly statistics                             |
@@ -46,18 +44,15 @@ paths; consumer configs only select their files.
 ## Data flow
 
 ```text
-Desktop views ── typed Tauri commands ─┐
-CLI commands ────────────────────────┤
-                                    └─ Rust feature crates
-                                       ├─ shared SQLite / OS credentials
-                                       ├─ consumer REST APIs / R2
-                                       ├─ calendar sources / provider APIs
-                                       └─ native playback and device services
+Desktop views ── typed Tauri commands ── Rust feature crates
+                                         ├─ shared SQLite / OS credentials
+                                         ├─ consumer REST APIs
+                                         ├─ calendar sources / provider APIs
+                                         └─ native playback and device services
 ```
 
 Each Rust feature owns its wire types, validation, external I/O and transactions. Tauri commands
-translate inputs and return tagged `ready` or `failed` results. CLI commands reuse these feature
-boundaries rather than desktop commands. Provider output excludes credentials; Settings prefill is
+translate inputs and return tagged `ready` or `failed` results. Provider output excludes credentials; Settings prefill is
 the narrow exception for values the user edits locally.
 
 ## Desktop boundary
@@ -118,7 +113,6 @@ QQ Music keeps session renewal and Cookie authentication in `qq/auth.rs`, shared
 the provider root owns library and playback coordination, and `qq/audio.rs` owns audio execution.
 Music and game runtimes outlive route mounts. Their authentication, cancellation, cache and playback
 rules belong in [Music](MUSIC.md) and [Games](GAMES.md); NAS protocols belong in [UGOS](UGOS.md).
-Inbox independently activates its ntfy stream while its route is active.
 Device storage reads OS capacity only; category inspection is delegated to system storage settings.
 Knowledge loads a summary-only index without fetching or compiling bodies. Newspaper is independent:
 `newspaper::Reader` reads the latest AIHOT daily, serves it for 60 seconds and then revalidates with
@@ -145,29 +139,20 @@ The updater verifies signed artifacts before installation; setup belongs in
 
 ## Content production
 
-The `markdown` crate owns document and Memo compilation (`publication::render`,
-`knowledge::compile`, `knowledge::fallback`, `render_memo`) and reads embed provider data.
+The `markdown` crate owns Knowledge and Memo compilation (`knowledge::compile`,
+`knowledge::fallback`, `render_memo`) and reads embed provider data.
 `md-dialect` collects embed references without I/O, validates and renders custom `embed:*` fences,
 lays out structured diagrams, and normalizes source examples consistently for provider discovery
 and compilation. Annotation, quote and diff rendering require no provider reads. Inline image shortcodes use a bundled
 `md-dialect` catalog and transform prose events before HTML assembly; compilation performs no image reads.
 Article cards use host-provided index metadata; `github`, `market-data`, and `link-preview` supply
 repository, market, website and X post metadata for provider cards. [Markdown](MARKDOWN.md) owns
-syntax and rendering safety;
-[Workflow](<>) owns operations and recovery.
+syntax and rendering safety.
 
-`vesper build` compiles Markdown under `content/` to HTML in a temporary directory, copies other
-regular assets, and emits `content.json`. It rejects symlinks and output collisions. A Rust guard
-removes temporary artifacts after success or failure. Source HTML stays escaped; generated markup
-and sanitized diagrams enter the output through the compiler boundary.
-Media fences compile to native players; desktop readers add playback controls and stop media on exit.
-GitHub file links resolve to raw resources. The builder validates document-relative media
-inside `content/`; static publication streams copied assets to R2 with extension-based MIME types.
-Remote media stays a URL and is loaded by the reader rather than the compilation pipeline.
-
-`vesper publish` shows an upload plan by default; `--live` uploads beneath `blog/` through the Rust
-S3 SDK. It does not delete destination-only objects. Remote consumer projects own their Worker
-runtimes, R2 bindings and deployment configuration.
+Source HTML stays escaped; generated markup and sanitized diagrams enter the output through the
+compiler boundary. Media fences compile to native players; desktop readers add playback controls
+and stop media on exit. GitHub file links resolve to raw resources. Remote media stays a URL and is
+loaded by the reader rather than the compilation pipeline.
 
 ## Consumer projections
 
@@ -187,8 +172,9 @@ restoring invalidated content. Writes retain each consumer's server-side coordin
 The desktop signs in once with Vesper (noted-this.date): it registers itself as an OAuth client on
 first use (kept in the vault), signs in with PKCE on `127.0.0.1:8793` and sends the Vesper access
 token to Vesper for memos and photos and to my-knowledge for articles, which checks it by calling
-Vesper's `/api/workspace` and comparing the owner's workspace UUID. Refresh-token rotation runs under
-a vault lock and a rejected grant clears the session.
+Vesper's `/api/workspace` and comparing the owner's workspace UUID. One in-process lock serializes
+refresh-token rotation, and a rejected grant clears the session. The sidebar profile shows the
+signed-in Vesper name, handle and picture and owns sign-in and sign-out.
 
 | Site                    | REST resources                                                       | Anonymous reads                                                       |
 | ----------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -220,9 +206,8 @@ Content and staged visibility share one Save request. Article-list URLs resolve 
 and desktop destinations in Rust; individual enrichment failures preserve neighboring cards and
 leave source code visible when an article cannot be enriched.
 
-Moment shares a Rust EXIF reader between desktop preview and CLI upload without decoding pixels.
-Desktop publication uses reviewed form values, including cleared metadata; CLI upload uses EXIF for
-unspecified fields. Failed partial uploads can be removed before metadata registration starts.
+Moment reads EXIF for the upload form preview without decoding pixels; publication uses the reviewed
+form values, including cleared metadata. Failed partial uploads can be removed before metadata registration starts.
 After registration starts, objects remain available for reconciliation because the server may have
 committed them.
 
@@ -236,7 +221,7 @@ credentials use their respective storage boundaries.
 ## Local persistence
 
 `crates/database` owns the application identifier and `vesper.sqlite3` in local application data;
-Desktop and CLI both resolve it with `database::path()`. Date columns store `YYYY-MM-DD` text and
+The desktop resolves it with `database::path()`. Date columns store `YYYY-MM-DD` text and
 `database::date::parse` owns that format. Feature crates own typed records, validation and
 transactions. `schema.sql` is the sole schema definition; startup creates missing
 tables without an upgrade or reset layer. [Persistence](PERSISTENCE.md) defines table ownership,
@@ -255,7 +240,7 @@ reads stay in this crate. The Notion CLI owns authentication; Codex Resets needs
 preference. `store/calendar.rs` owns calendar snapshots, source synchronization and reconciliation into saved
 tasks; the store root owns task mutations and database transactions. Source adapters mark live
 remote content as source-owned; SQLite reads reconstruct that ownership from existing source-prefixed
-IDs. ICS imports and carried follow-ups own local content, independently of attached calendar
+IDs. ICS occurrences and carried follow-ups own local content, independently of attached calendar
 metadata. Completed tasks require reopening before edits, deletion or carry-forward changes.
 Each source preserves saved data on failure. Configuration changes and reconciliation share locks
 through commit.

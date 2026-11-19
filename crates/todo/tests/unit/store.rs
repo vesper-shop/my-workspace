@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn shared_paths() {
     let store = Store::shared().unwrap();
-    assert_eq!(store.database_path(), database::path().unwrap());
+    assert_eq!(store.path, database::path().unwrap());
     assert_eq!(
-        store.schedule_directory(),
+        store.schedule_directory,
         dirs::data_dir().unwrap().join("me.you-find.vesper/ics"),
     );
 }
@@ -16,7 +16,7 @@ async fn lists_while_writing() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::new(directory.path().join(database::FILE_NAME));
     store.create("2026-09-07", "Committed", None).await.unwrap();
-    let mut writer = database::open(store.database_path()).unwrap();
+    let mut writer = database::open(&store.path).unwrap();
     writer
         .batch_execute("BEGIN IMMEDIATE; UPDATE todo_items SET text = 'Pending';")
         .unwrap();
@@ -82,7 +82,7 @@ async fn rolls_back_failed_mutation() {
     use diesel::connection::SimpleConnection;
     let (_directory, store) = test_store();
     let original = store.create("2026-08-23", "Keep me", None).await.unwrap();
-    let mut connection = database::open(store.database_path()).unwrap();
+    let mut connection = database::open(&store.path).unwrap();
     connection.batch_execute("CREATE TRIGGER reject_todo BEFORE INSERT ON todo_items BEGIN SELECT RAISE(ABORT, 'injected failure'); END;").unwrap();
     assert!(store.create("2026-08-23", "Fail", None).await.is_err());
     assert_eq!(store.list("2026-08-23").await.unwrap(), original);
@@ -144,7 +144,7 @@ async fn edits_preserve_task_state() {
         Err(Error::DescriptionTooLong)
     ));
     assert_eq!(store.get(date, id).await.unwrap().text, "Title only");
-    let reopened = Store::new(store.database_path().to_owned());
+    let reopened = Store::new(store.path.to_owned());
     assert_eq!(
         reopened.get(date, id).await.unwrap().description.as_deref(),
         Some("Chapter two")

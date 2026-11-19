@@ -1,4 +1,4 @@
-use super::{ApiError, Client, send};
+use super::{ApiError, Client, VESPER_API, resource_url, send};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,6 @@ mod media;
 
 pub(super) use media::Error as MediaError;
 
-const ENDPOINT: &str = "https://noted-this.date/api";
 pub const KEY_PREFIX: &str = "img/vesper/";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -40,20 +39,17 @@ pub async fn read_metadata(source: Vec<u8>) -> Result<PhotoMetadata, ApiError> {
     task.map_err(ApiError::Media)
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Photo {
     pub id: String,
     pub entry_id: String,
-    pub url: String,
-    pub thumbnail_url: String,
-    pub r2_key: String,
-    pub thumbnail_r2_key: String,
+    pub image_key: String,
+    pub thumbnail_key: String,
     pub thumb_hash: Option<String>,
     pub title: String,
     pub width: u32,
     pub height: u32,
-    pub aspect_ratio: Option<f64>,
     pub tags: Vec<String>,
     pub date: Option<String>,
     pub description: Option<String>,
@@ -65,11 +61,6 @@ pub struct Photo {
 pub struct Page {
     pub photos: Vec<Photo>,
     pub total: usize,
-}
-
-pub enum MetadataPolicy {
-    SourceDefaults,
-    Reviewed,
 }
 
 #[derive(Deserialize)]
@@ -84,7 +75,7 @@ pub struct Upload {
 }
 
 impl Upload {
-    pub fn validate(&self) -> Result<(), ApiError> {
+    fn validate(&self) -> Result<(), ApiError> {
         const INVALID_METADATA: &str = "photo upload metadata is invalid";
         if self.title.trim().is_empty() || self.title.chars().count() > 120 {
             return Err(ApiError::Protocol(INVALID_METADATA.to_owned()));
@@ -114,45 +105,14 @@ impl Upload {
         }
         Ok(())
     }
-
-    fn apply_metadata(&mut self, metadata: PhotoMetadata, policy: MetadataPolicy) {
-        if matches!(policy, MetadataPolicy::SourceDefaults) {
-            self.date = self.date.take().or(metadata.captured_at);
-            self.geo = self.geo.take().or(metadata.geo);
-        }
-    }
 }
 
-#[derive(Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+/// Vesper keeps a photo's date and place from the upload; only the caption and tags change.
+#[derive(Deserialize)]
 pub struct Update {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<Vec<String>>,
-    #[serde(
-        default,
-        deserialize_with = "patch_value",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub date: Option<Option<String>>,
-    #[serde(
-        default,
-        deserialize_with = "patch_value",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub geo: Option<Option<Geo>>,
-}
-
-// Missing fields leave data unchanged; an explicit null clears the stored value.
-fn patch_value<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<T>::deserialize(deserializer).map(Some)
+    pub title: String,
+    pub description: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -239,12 +199,9 @@ impl RemotePhoto {
     fn into_photo(self) -> Photo {
         let (title, description) = split_caption(&self.caption);
         Photo {
-            url: format!("{ENDPOINT}/photos/{}?size=original", self.id),
-            thumbnail_url: format!("{ENDPOINT}/photos/{}?size=thumb", self.id),
-            r2_key: format!("{KEY_PREFIX}{}.jpg", self.id),
-            thumbnail_r2_key: format!("{KEY_PREFIX}{}.thumb.jpg", self.id),
+            image_key: format!("{KEY_PREFIX}{}.jpg", self.id),
+            thumbnail_key: format!("{KEY_PREFIX}{}.thumb.jpg", self.id),
             thumb_hash: hex_thumb_hash(&self.thumb_hash),
-            aspect_ratio: Some(f64::from(self.width) / f64::from(self.height)),
             date: iso(self.taken_at.unwrap_or(self.occurred_at)),
             id: self.id,
             entry_id: self.entry_id,
@@ -258,19 +215,6 @@ impl RemotePhoto {
     }
 }
 
-fn entry_url(id: &str) -> Result<reqwest::Url, ApiError> {
-    if id.trim().is_empty() {
-        return Err(ApiError::Protocol("a photo ID is required".to_owned()));
-    }
-    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/entries/"))
-        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
-    url.path_segments_mut()
-        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
-        .pop_if_empty()
-        .push(id);
-    Ok(url)
-}
-
 pub async fn list() -> Result<Page, ApiError> {
     let client = Client::load().await?;
     let mut photos = Vec::new();
@@ -278,7 +222,7 @@ pub async fn list() -> Result<Page, ApiError> {
     loop {
         let mut request = client
             .http
-            .get(format!("{ENDPOINT}/photos"))
+            .get(format!("{VESPER_API}/photos"))
             .bearer_auth(&client.token);
         if let Some(cursor) = &before {
             request = request.query(&[("before", cursor)]);
@@ -296,7 +240,7 @@ pub async fn list() -> Result<Page, ApiError> {
     })
 }
 
-pub async fn get(id: &str) -> Result<Photo, ApiError> {
+async fn get(id: &str) -> Result<Photo, ApiError> {
     if id.trim().is_empty() {
         return Err(ApiError::Protocol("a photo ID is required".to_owned()));
     }
@@ -313,7 +257,7 @@ pub async fn tags() -> Result<Vec<String>, ApiError> {
     let response = send(
         client
             .http
-            .get(format!("{ENDPOINT}/tags"))
+            .get(format!("{VESPER_API}/tags"))
             .bearer_auth(&client.token),
         "list photo tags",
     )
@@ -322,17 +266,12 @@ pub async fn tags() -> Result<Vec<String>, ApiError> {
     Ok(result.tags.into_iter().map(|tag| tag.name).collect())
 }
 
-pub async fn upload(
-    mut input: Upload,
-    source: Vec<u8>,
-    metadata_policy: MetadataPolicy,
-) -> Result<Photo, ApiError> {
+pub async fn upload(input: Upload, source: Vec<u8>) -> Result<Photo, ApiError> {
     input.validate()?;
     let prepare_task = tokio::task::spawn_blocking(move || media::prepare(&source))
         .await
         .map_err(|_| ApiError::Protocol("photo processor stopped unexpectedly".to_owned()))?;
     let prepared = prepare_task.map_err(ApiError::Media)?;
-    input.apply_metadata(prepared.metadata, metadata_policy);
     let tags = input
         .tags
         .iter()
@@ -343,7 +282,7 @@ pub async fn upload(
     send(
         client
             .http
-            .put(format!("{ENDPOINT}/photos"))
+            .put(format!("{VESPER_API}/photos"))
             .bearer_auth(&client.token)
             .header(reqwest::header::CONTENT_TYPE, "image/png")
             .header("x-content-sha256", &digest)
@@ -389,7 +328,7 @@ pub async fn upload(
     let created: Created = send(
         client
             .http
-            .post(format!("{ENDPOINT}/entries"))
+            .post(format!("{VESPER_API}/entries"))
             .bearer_auth(&client.token)
             .multipart(form),
         "create photo entry",
@@ -400,7 +339,7 @@ pub async fn upload(
     let entry: EntryPhotos = send(
         client
             .http
-            .get(entry_url(&created.id)?)
+            .get(resource_url("entries", &created.id)?)
             .bearer_auth(&client.token),
         "read photo entry",
     )
@@ -427,12 +366,7 @@ pub async fn image(key: &str) -> Result<Vec<u8>, ApiError> {
         ),
     };
     let client = Client::load().await?;
-    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}/photos/"))
-        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
-    url.path_segments_mut()
-        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
-        .pop_if_empty()
-        .push(id);
+    let mut url = resource_url("photos", id)?;
     url.query_pairs_mut().append_pair("size", size);
     let response = send(
         client.http.get(url).bearer_auth(&client.token),
@@ -442,33 +376,19 @@ pub async fn image(key: &str) -> Result<Vec<u8>, ApiError> {
     Ok(response.bytes().await?.to_vec())
 }
 
-/// Vesper keeps the taken time and place that came with the photo.
 pub async fn update(id: &str, input: &Update) -> Result<Photo, ApiError> {
-    if input.date.is_some() || input.geo.is_some() {
-        return Err(ApiError::Protocol(
-            "Vesper keeps a photo's date and place from the upload; edit them in Vesper".to_owned(),
-        ));
-    }
     let photo = get(id).await?;
     let client = Client::load().await?;
-    let body = (input.title.is_some() || input.description.is_some()).then(|| {
-        caption(
-            input.title.as_deref().unwrap_or(&photo.title),
-            input
-                .description
-                .as_deref()
-                .or(photo.description.as_deref()),
-        )
-    });
-    let tags = input.tags.as_ref().map(|tags| {
-        tags.iter()
-            .map(|tag| tag.trim().to_lowercase())
-            .collect::<Vec<_>>()
-    });
+    let body = caption(&input.title, Some(&input.description));
+    let tags = input
+        .tags
+        .iter()
+        .map(|tag| tag.trim().to_lowercase())
+        .collect::<Vec<_>>();
     send(
         client
             .http
-            .patch(entry_url(&photo.entry_id)?)
+            .patch(resource_url("entries", &photo.entry_id)?)
             .bearer_auth(&client.token)
             .json(&serde_json::json!({ "body": body, "tags": tags })),
         "update photo",
@@ -483,7 +403,7 @@ pub async fn delete(id: &str) -> Result<(), ApiError> {
     send(
         client
             .http
-            .delete(entry_url(&photo.entry_id)?)
+            .delete(resource_url("entries", &photo.entry_id)?)
             .bearer_auth(&client.token),
         "delete photo",
     )
@@ -511,28 +431,20 @@ mod tests {
         assert_eq!(super::hex_thumb_hash("AQID").as_deref(), Some("010203"));
     }
 
-    #[tokio::test]
-    async fn rejects_date_and_place_edits() {
-        let input: Update = serde_json::from_str(r#"{"date":null}"#).unwrap();
-        assert!(matches!(
-            super::update("id", &input).await,
-            Err(super::ApiError::Protocol(_))
-        ));
-    }
-
     #[test]
-    fn preserves_json_patch_presence() {
-        for json in [
-            r#"{}"#,
-            r#"{"date":null,"geo":null}"#,
-            r#"{"date":"2026-09-10","geo":{"lat":1.0,"lng":2.0}}"#,
-        ] {
-            let input: Update = serde_json::from_str(json).unwrap();
-            assert_eq!(
-                serde_json::to_value(input).unwrap(),
-                serde_json::from_str::<serde_json::Value>(json).unwrap()
-            );
-        }
+    fn caption_update() {
+        let update: Update = serde_json::from_value(serde_json::json!({
+            "title": " Harbour ",
+            "description": "",
+            "tags": ["Sea"]
+        }))
+        .expect("desktop update should match the command contract");
+
+        assert_eq!(
+            super::caption(&update.title, Some(&update.description)),
+            "Harbour"
+        );
+        assert_eq!(update.tags, ["Sea"]);
     }
 
     #[test]

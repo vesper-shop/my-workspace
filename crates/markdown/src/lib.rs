@@ -1,6 +1,5 @@
 pub mod knowledge;
 mod providers;
-pub mod publication;
 
 pub use md_dialect::{ArticleMetadata, article_ids, article_urls};
 

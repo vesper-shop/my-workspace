@@ -17,7 +17,6 @@ export default defineConfig(
 		"**/.svelte-check/**",
 		"**/.svelte-kit/**",
 		"**/.void/**",
-		".agents/**",
 		".codex/**",
 		"**/src-tauri/gen/**",
 	]),

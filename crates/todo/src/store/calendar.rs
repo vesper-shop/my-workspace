@@ -19,61 +19,7 @@ pub(super) struct CalendarCache {
 const CALENDAR_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(300);
 
 impl Store {
-    pub fn schedule_directory(&self) -> &Path {
-        &self.schedule_directory
-    }
-
-    pub async fn import_schedules(&self, sources: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
-        let mut names = BTreeSet::new();
-        let mut schedules = Vec::with_capacity(sources.len());
-        for source in sources {
-            let name = schedule_name(source)?;
-            if !names.insert(name.to_lowercase()) {
-                return Err(Error::DuplicateScheduleName(name));
-            }
-            let content = tokio::fs::read_to_string(source)
-                .await
-                .map_err(|source_error| Error::Io {
-                    operation: "read",
-                    path: source.clone(),
-                    source: source_error,
-                })?;
-            crate::schedule::validate(&content).map_err(|message| Error::ScheduleParse {
-                path: source.clone(),
-                message,
-            })?;
-            schedules.push((name, content));
-        }
-        let file_guard = self.calendar_lock().await?;
-        let directory = self.schedule_directory.clone();
-        let outcome = tokio::task::spawn_blocking(move || {
-            // Keep the cross-process lock until installation finishes, even if the caller cancels.
-            let _file = file_guard;
-            std::fs::create_dir_all(&directory).map_err(|source| Error::Io {
-                operation: "create",
-                path: directory.clone(),
-                source,
-            })?;
-            let mut installed = Vec::with_capacity(schedules.len());
-            for (name, content) in schedules {
-                let target = directory.join(name);
-                install_schedule(&target, content.as_bytes()).map_err(|source| Error::Io {
-                    operation: "install schedule (earlier files may already be installed)",
-                    path: target.clone(),
-                    source,
-                })?;
-                installed.push(target);
-            }
-            Ok(installed)
-        })
-        .await;
-        match outcome {
-            Ok(result) => result,
-            Err(error) => Err(Error::Task(error.to_string())),
-        }
-    }
-
-    // Coordinates the API read and commit with configuration writes in both Desktop and CLI.
+    // Held through each blocking commit, so a cancelled read cannot overlap the next one.
     async fn calendar_lock(&self) -> Result<std::fs::File, Error> {
         let path = self.path.with_extension("calendar.lock");
         tokio::task::spawn_blocking(move || {
@@ -138,10 +84,6 @@ impl Store {
         .await?;
         cache.codex.clear();
         Ok(())
-    }
-
-    pub async fn sync_calendar(&self, date: &str) -> Result<List, Error> {
-        self.read_calendar(date, true).await
     }
 
     pub async fn read_calendar(&self, date: &str, refresh: bool) -> Result<List, Error> {
@@ -446,22 +388,6 @@ async fn read_notion(
         })
         .cloned()
         .collect())
-}
-
-// Stage complete bytes before replacing a schedule. Temporary files have no .ics extension,
-// so an interrupted installation cannot become a schedule source on the next sync.
-fn install_schedule(
-    path: &std::path::Path,
-    mut content: impl std::io::Read,
-) -> std::io::Result<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| std::io::Error::other("schedule path has no parent"))?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-    std::io::copy(&mut content, temporary.as_file_mut())?;
-    temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|error| error.error)?;
-    Ok(())
 }
 
 fn schedule_name(path: &Path) -> Result<String, Error> {

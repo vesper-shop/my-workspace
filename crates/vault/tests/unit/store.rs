@@ -14,8 +14,7 @@ struct Memory {
 struct TestBackend(Arc<Mutex<Memory>>);
 
 impl Backend for TestBackend {
-    fn read(&self, account: &str) -> Result<Stored<String>, Error> {
-        assert_eq!(account, ACCOUNT);
+    fn read(&self) -> Result<Stored<String>, Error> {
         let mut memory = self.0.lock().unwrap();
         memory.reads += 1;
         if memory.fail_read {
@@ -38,179 +37,80 @@ impl Backend for TestBackend {
     }
 }
 
-struct Fixture {
-    directory: std::path::PathBuf,
-    backend: TestBackend,
-}
-
-impl Fixture {
-    fn new() -> Self {
-        Self {
-            directory: std::env::temp_dir()
-                .join(format!("vesper-credentials-{}", uuid::Uuid::new_v4())),
-            backend: TestBackend::default(),
-        }
-    }
-
-    fn store(&self) -> CredentialStore<TestBackend> {
-        CredentialStore {
-            backend: self.backend.clone(),
-            cache: None,
-        }
-    }
-
-    fn path(&self) -> std::path::PathBuf {
-        self.directory.join("credentials.lock")
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.directory).unwrap();
+fn store(backend: &TestBackend) -> CredentialStore<TestBackend> {
+    CredentialStore {
+        backend: backend.clone(),
+        cache: None,
     }
 }
 
 #[test]
 fn single_keychain_read() {
-    let fixture = Fixture::new();
-    fixture.backend.0.lock().unwrap().encoded =
-        Some(r#"{"entries":{"my-memos-api":"memo-token","cloudflare-r2":"r2-token"}}"#.to_owned());
-    let mut store = fixture.store();
-    assert!(
-        matches!(store.read(&fixture.path(), "my-memos-api").unwrap(), Stored::Ready(value) if value == "memo-token")
-    );
-    assert!(
-        matches!(store.read(&fixture.path(), "cloudflare-r2").unwrap(), Stored::Ready(value) if value == "r2-token")
-    );
-    assert!(matches!(
-        store.read(&fixture.path(), "ntfy-notifications").unwrap(),
-        Stored::Missing
-    ));
-    assert_eq!(fixture.backend.0.lock().unwrap().reads, 1);
-    assert_eq!(std::fs::read(fixture.path()).unwrap().len(), 16);
-}
-
-#[test]
-fn missing_credentials() {
-    let fixture = Fixture::new();
-    let mut store = fixture.store();
-    assert!(matches!(
-        store.read(&fixture.path(), "my-memos-api").unwrap(),
-        Stored::Missing
-    ));
-    assert!(matches!(
-        store.read(&fixture.path(), "cloudflare-r2").unwrap(),
-        Stored::Missing
-    ));
-    let memory = fixture.backend.0.lock().unwrap();
+    let backend = TestBackend::default();
+    backend.0.lock().unwrap().encoded =
+        Some(r#"{"entries":{"vesper":"session","nowledge":"key"}}"#.to_owned());
+    let mut store = store(&backend);
+    assert!(matches!(store.read("vesper").unwrap(), Stored::Ready(value) if value == "session"));
+    assert!(matches!(store.read("nowledge").unwrap(), Stored::Ready(value) if value == "key"));
+    assert!(matches!(store.read("ugos").unwrap(), Stored::Missing));
+    store.save("vesper", Some("session")).unwrap();
+    store.save("ugos", None).unwrap();
+    let memory = backend.0.lock().unwrap();
     assert_eq!(memory.reads, 1);
     assert_eq!(memory.writes, 0);
 }
 
 #[test]
-fn cached_readers() {
-    let fixture = Fixture::new();
-    let mut desktop = fixture.store();
-    let mut cli = fixture.store();
-    desktop.read(&fixture.path(), "my-memos-api").unwrap();
-    cli.read(&fixture.path(), "my-memos-api").unwrap();
-    desktop
-        .save(&fixture.path(), "my-memos-api", Some("memo-token"))
-        .unwrap();
-    cli.save(&fixture.path(), "cloudflare-r2", Some("r2-token"))
-        .unwrap();
-    assert!(
-        matches!(desktop.read(&fixture.path(), "cloudflare-r2").unwrap(), Stored::Ready(value) if value == "r2-token")
-    );
-    assert!(
-        matches!(cli.read(&fixture.path(), "my-memos-api").unwrap(), Stored::Ready(value) if value == "memo-token")
-    );
-    assert_eq!(fixture.backend.0.lock().unwrap().reads, 4);
-    let revision = std::fs::read(fixture.path()).unwrap();
-    desktop
-        .save(&fixture.path(), "my-memos-api", Some("memo-token"))
-        .unwrap();
-    cli.save(&fixture.path(), "missing-provider", None).unwrap();
-    desktop.read(&fixture.path(), "cloudflare-r2").unwrap();
-    cli.read(&fixture.path(), "my-memos-api").unwrap();
-    assert_eq!(std::fs::read(fixture.path()).unwrap(), revision);
-    let memory = fixture.backend.0.lock().unwrap();
-    assert_eq!(memory.reads, 4);
-    assert_eq!(memory.writes, 2);
-}
-
-#[test]
 fn failed_writes() {
-    let fixture = Fixture::new();
-    let mut store = fixture.store();
-    store
-        .save(&fixture.path(), "app-lock", Some("original"))
-        .unwrap();
-    fixture.backend.0.lock().unwrap().fail_write = true;
-    assert!(
-        store
-            .save(&fixture.path(), "app-lock", Some("replacement"))
-            .is_err()
-    );
-    assert!(
-        matches!(store.read(&fixture.path(), "app-lock").unwrap(), Stored::Ready(value) if value == "original")
-    );
+    let backend = TestBackend::default();
+    let mut store = store(&backend);
+    store.save("app-lock", Some("original")).unwrap();
+    backend.0.lock().unwrap().fail_write = true;
+    assert!(store.save("app-lock", Some("replacement")).is_err());
+    assert!(matches!(store.read("app-lock").unwrap(), Stored::Ready(value) if value == "original"));
 }
 
 #[test]
 fn invalid_credentials() {
-    let fixture = Fixture::new();
-    let mut store = fixture.store();
-    fixture.backend.0.lock().unwrap().fail_read = true;
-    assert!(
-        store
-            .save(&fixture.path(), "app-lock", Some("new-password"))
-            .is_err()
-    );
-    fixture.backend.0.lock().unwrap().fail_read = false;
-    fixture.backend.0.lock().unwrap().encoded = Some(r#""private-value""#.to_owned());
-    assert!(matches!(
-        store.read(&fixture.path(), "app-lock"),
-        Err(Error::InvalidStore)
-    ));
-    assert_eq!(fixture.backend.0.lock().unwrap().writes, 0);
+    let backend = TestBackend::default();
+    let mut store = store(&backend);
+    backend.0.lock().unwrap().fail_read = true;
+    assert!(store.save("app-lock", Some("new-password")).is_err());
+    backend.0.lock().unwrap().fail_read = false;
+    backend.0.lock().unwrap().encoded = Some(r#""private-value""#.to_owned());
+    assert!(matches!(store.read("app-lock"), Err(Error::InvalidStore)));
+    assert_eq!(backend.0.lock().unwrap().writes, 0);
 }
 
 #[test]
 fn deletion() {
-    let fixture = Fixture::new();
-    let mut store = fixture.store();
-    store
-        .save(&fixture.path(), "app-lock", Some("password"))
-        .unwrap();
-    store
-        .save(&fixture.path(), "my-memos-api", Some("token"))
-        .unwrap();
-    store.save(&fixture.path(), "app-lock", None).unwrap();
-    let mut restarted = fixture.store();
+    let backend = TestBackend::default();
+    let mut original = store(&backend);
+    original.save("app-lock", Some("password")).unwrap();
+    original.save("vesper", Some("session")).unwrap();
+    original.save("app-lock", None).unwrap();
+    let mut restarted = store(&backend);
     assert!(matches!(
-        restarted.read(&fixture.path(), "app-lock").unwrap(),
+        restarted.read("app-lock").unwrap(),
         Stored::Missing
     ));
     assert!(
-        matches!(restarted.read(&fixture.path(), "my-memos-api").unwrap(), Stored::Ready(value) if value == "token")
+        matches!(restarted.read("vesper").unwrap(), Stored::Ready(value) if value == "session")
     );
 }
 
 #[test]
 fn concurrent_writers() {
-    let fixture = Fixture::new();
-    let barrier = Arc::new(std::sync::Barrier::new(8));
+    let backend = TestBackend::default();
+    let shared = Mutex::new(store(&backend));
     std::thread::scope(|scope| {
         for index in 0..8 {
-            let mut store = fixture.store();
-            let path = fixture.path();
-            let barrier = barrier.clone();
+            let shared = &shared;
             scope.spawn(move || {
-                barrier.wait();
-                store
+                shared
+                    .lock()
+                    .unwrap()
                     .save(
-                        &path,
                         &format!("provider-{index}"),
                         Some(&format!("value-{index}")),
                     )
@@ -218,11 +118,11 @@ fn concurrent_writers() {
             });
         }
     });
-    let mut reader = fixture.store();
+    let mut restarted = store(&backend);
     for index in 0..8 {
         assert!(
-            matches!(reader.read(&fixture.path(), &format!("provider-{index}")).unwrap(), Stored::Ready(value) if value == format!("value-{index}"))
+            matches!(restarted.read(&format!("provider-{index}")).unwrap(), Stored::Ready(value) if value == format!("value-{index}"))
         );
     }
-    assert_eq!(fixture.backend.0.lock().unwrap().writes, 8);
+    assert_eq!(backend.0.lock().unwrap().writes, 8);
 }

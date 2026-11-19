@@ -269,15 +269,6 @@ fn rejects_invalid_media() {
 }
 
 #[test]
-fn collects_local_assets() {
-    let source = "```embed:media\ntype: audio\nsrc: ./audio.mp3\n```\n\n```EMBED:MEDIA\ntype: video\nsrc: https://example.com/video.mp4\nposter: ./cover.jpg\n```\n\n```embed:media\ntype: audio\nsrc: ./audio.mp3\n```\n\n```text\ntype: audio\nsrc: ignored.mp3\n```";
-    assert_eq!(
-        collect_media_paths(source).unwrap(),
-        vec!["./audio.mp3", "./cover.jpg"]
-    );
-}
-
-#[test]
 fn previews_video() {
     let data = Data::default();
     let preview = render(MEDIA, "type: video\nsrc: ./video.mp4", &data)
@@ -547,15 +538,6 @@ fn finds_footnote_articles() {
     assert_eq!(
         super::article_urls(source).unwrap(),
         ["https://knowledge.you-find.me/articles/example"]
-    );
-}
-
-#[test]
-fn finds_footnote_media() {
-    let source = "Text[^note]\n\n[^note]:\n    ```embed:media\n    type: audio\n    src: ../recording.mp3\n    ```\n";
-    assert_eq!(
-        super::collect_media_paths(source).unwrap(),
-        ["../recording.mp3"]
     );
 }
 

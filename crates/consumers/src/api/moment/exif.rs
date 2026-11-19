@@ -281,34 +281,4 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn applies_metadata_policy() {
-        use super::super::{MetadataPolicy, PhotoMetadata, Upload};
-        let mut input = Upload {
-            title: "Photo".into(),
-            description: None,
-            tags: vec![],
-            date: None,
-            geo: None,
-        };
-        let fixture = || PhotoMetadata {
-            captured_at: Some("2026-09-18T12:34:56+08:00".into()),
-            geo: Some(Geo {
-                lat: 31.2,
-                lng: 121.5,
-            }),
-        };
-        input.apply_metadata(fixture(), MetadataPolicy::Reviewed);
-        assert!(input.date.is_none());
-        assert!(input.geo.is_none());
-        input.apply_metadata(fixture(), MetadataPolicy::SourceDefaults);
-        assert_eq!(input.date.as_deref(), Some("2026-09-18T12:34:56+08:00"));
-        assert_eq!(input.geo.as_ref().expect("source GPS").lat, 31.2);
-        input.date = Some("2025-01-01T10:00:00Z".into());
-        input.geo = Some(Geo { lat: 0.0, lng: 0.0 });
-        input.apply_metadata(fixture(), MetadataPolicy::SourceDefaults);
-        assert_eq!(input.date.as_deref(), Some("2025-01-01T10:00:00Z"));
-        assert_eq!(input.geo.as_ref().expect("manual GPS").lat, 0.0);
-    }
 }

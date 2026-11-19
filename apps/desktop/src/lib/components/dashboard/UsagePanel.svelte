@@ -4,7 +4,7 @@
 	type RateWindow = { label: string; usedPercent: number; resetsAt: number | string | null };
 	type RateSection = { title: string; planType: string | null; windows: RateWindow[]; hasData: boolean; error: string | null };
 
-	let source:
+	type Source =
 		| { provider: "codex"; state: QueryState<CodexUsage> }
 		| { provider: "openCode"; state: QueryState<OpenCodeUsage> }
 		| { provider: "claude"; state: QueryState<ClaudeUsage> }
@@ -13,7 +13,9 @@
 		| { provider: "deepSeek"; state: QueryState<DeepSeekBalance> }
 		| { provider: "cherryIn"; state: QueryState<CherryInBalance> }
 		| { provider: "tokenFlux"; state: QueryState<TokenFluxUsage> }
-		| { provider: "dimAgent"; state: QueryState<DimAgentUsage> } = $props();
+		| { provider: "dimAgent"; state: QueryState<DimAgentUsage> };
+
+	let source: Source = $props();
 
 	const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 	const creditFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
@@ -79,7 +81,7 @@
 			expiresAt: credits.expiresAt,
 		};
 	});
-	let dimAgentFeatures = $derived.by((): Array<{ label: string; percent: number; used: number; allowance: number; unit: string }> => {
+	let dimAgentFeatures = $derived.by((): Array<{ label: string; percent: number; used: number; allowance: number; unit: string | null }> => {
 		if (source.provider !== "dimAgent" || source.state.data === null) return [];
 		return source.state.data.featureMeters
 			.filter((feature) => !feature.unlimited && feature.totalAllowance > 0)
@@ -88,12 +90,12 @@
 				percent: Math.max(0, Math.min(100, feature.totalRemaining / feature.totalAllowance * 100)),
 				used: feature.totalUsed,
 				allowance: feature.totalAllowance,
-				unit: feature.unit ?? "",
+				unit: feature.unit,
 			}));
 	});
 
 	function remaining(window: { usedPercent: number }): number { return Math.max(0, Math.min(100, 100 - window.usedPercent)); }
-	function providerLabel(value: typeof source.provider): string {
+	function providerLabel(value: Source["provider"]): string {
 		if (value === "codex") return "Codex quota";
 		if (value === "openCode") return "OpenCode Go quota";
 		if (value === "claude") return "Claude quota";
@@ -203,7 +205,7 @@
 					{#if meter !== null}
 					<div class="meter"><div><span>Credits</span><strong>{percentFormatter.format(meter.percent)}%</strong></div><div class="progress" role="progressbar" aria-label="DimAgent credits" aria-valuenow={meter.percent} aria-valuemin="0" aria-valuemax="100"><span style:width={`${meter.percent}%`}></span></div><small>{creditFormatter.format(meter.used)} / {creditFormatter.format(meter.total)} used{#if meter.expiresAt !== null} · resets {resetLabel(meter.expiresAt)}{/if}</small></div>
 					{/if}
-					{#each features as feature (feature.label)}<div class="meter"><div><span>{feature.label}</span><strong>{percentFormatter.format(feature.percent)}%</strong></div><div class="progress" role="progressbar" aria-label={`DimAgent ${feature.label}`} aria-valuenow={feature.percent} aria-valuemin="0" aria-valuemax="100"><span style:width={`${feature.percent}%`}></span></div><small>{creditFormatter.format(feature.used)} / {creditFormatter.format(feature.allowance)} {feature.unit} used</small></div>{/each}
+					{#each features as feature (feature.label)}<div class="meter"><div><span>{feature.label}</span><strong>{percentFormatter.format(feature.percent)}%</strong></div><div class="progress" role="progressbar" aria-label={`DimAgent ${feature.label}`} aria-valuenow={feature.percent} aria-valuemin="0" aria-valuemax="100"><span style:width={`${feature.percent}%`}></span></div><small>{creditFormatter.format(feature.used)} / {creditFormatter.format(feature.allowance)}{#if feature.unit !== null} {feature.unit}{/if} used</small></div>{/each}
 					{#if meter === null && features.length === 0}<p>No metered quota is available.</p>{/if}
 				</div>
 			{:else}<p>{loadingMessage(source.state.error)}</p>{/if}

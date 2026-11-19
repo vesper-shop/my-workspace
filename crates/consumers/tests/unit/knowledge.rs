@@ -40,11 +40,10 @@ async fn decodes_api_contracts() {
 
 #[test]
 fn validates_write_versions() {
-    let version = serde_json::json!({
+    let mut draft = serde_json::json!({
         "expectedHash": "a".repeat(64),
         "expectedUpdatedAt": "2026-09-20T11:00:00.000Z"
     });
-    let mut draft = version.clone();
     draft.as_object_mut().unwrap().extend(serde_json::json!({
         "title": "Title", "summary": "Summary", "body": "Body", "tags": [], "visibility": "private"
     }).as_object().unwrap().clone());
@@ -52,24 +51,6 @@ fn validates_write_versions() {
     assert_eq!(serde_json::to_value(decoded).unwrap(), draft);
     draft.as_object_mut().unwrap().remove("expectedUpdatedAt");
     assert!(serde_json::from_value::<DraftUpdate>(draft).is_err());
-    let mut documents = version.clone();
-    documents["documents"] = serde_json::json!({"zh": "Chinese document"});
-    let decoded: DocumentUpdate = serde_json::from_value(documents.clone()).unwrap();
-    assert_eq!(serde_json::to_value(decoded).unwrap(), documents);
-    documents
-        .as_object_mut()
-        .unwrap()
-        .remove("expectedUpdatedAt");
-    assert!(serde_json::from_value::<DocumentUpdate>(documents).is_err());
-    let mut visibility = version;
-    visibility["visibility"] = serde_json::json!("public");
-    let decoded: VisibilityUpdate = serde_json::from_value(visibility.clone()).unwrap();
-    assert_eq!(serde_json::to_value(decoded).unwrap(), visibility);
-    visibility
-        .as_object_mut()
-        .unwrap()
-        .remove("expectedUpdatedAt");
-    assert!(serde_json::from_value::<VisibilityUpdate>(visibility).is_err());
 }
 
 #[test]
@@ -174,27 +155,13 @@ async fn rejects_unsafe_article_ids() {
     let expected_hash = "a".repeat(64);
     let expected_updated_at = "2026-09-20T11:00:00.000Z".to_owned();
     let draft = DraftUpdate {
-        expected_hash: expected_hash.clone(),
-        expected_updated_at: expected_updated_at.clone(),
+        expected_hash,
+        expected_updated_at,
         visibility: None,
         title: "Title".to_owned(),
         summary: "Summary".to_owned(),
         body: "Body".to_owned(),
         tags: Vec::new(),
-    };
-    let documents = DocumentUpdate {
-        expected_hash: expected_hash.clone(),
-        expected_updated_at: expected_updated_at.clone(),
-        documents: Documents {
-            zh: "Chinese document".to_owned(),
-            en: None,
-            ja: None,
-        },
-    };
-    let visibility = VisibilityUpdate {
-        expected_hash,
-        expected_updated_at,
-        visibility: Visibility::Private,
     };
     for id in [
         "",
@@ -207,20 +174,6 @@ async fn rejects_unsafe_article_ids() {
         assert!(matches!(get(id).await, Err(ApiError::Protocol(_))), "{id}");
         assert!(
             matches!(update_draft(id, &draft).await, Err(ApiError::Protocol(_))),
-            "{id}"
-        );
-        assert!(
-            matches!(
-                update_documents(id, &documents).await,
-                Err(ApiError::Protocol(_))
-            ),
-            "{id}"
-        );
-        assert!(
-            matches!(
-                set_visibility(id, &visibility).await,
-                Err(ApiError::Protocol(_))
-            ),
             "{id}"
         );
         assert!(

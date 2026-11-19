@@ -7,7 +7,7 @@
 	import type { CommandResponse } from "@/lib/contracts/command";
 	import type { PhotoItem, PhotoUpdate, PhotoUpload } from "@/lib/contracts/content";
 	import MomentUpload from "../moment/MomentUpload.svelte";
-	import R2Image from "../moment/R2Image.svelte";
+	import PhotoImage from "../moment/PhotoImage.svelte";
 
 	let { photos, tags, tagStatus, total, onupload, onupdate, ondelete }: { photos: PhotoItem[]; tags: string[]; tagStatus?: Snippet; total: number; onupload: (input: PhotoUpload, file: File) => Promise<CommandResponse<PhotoItem>>; onupdate: (id: string, input: PhotoUpdate) => Promise<CommandResponse<PhotoItem>>; ondelete: (id: string) => Promise<CommandResponse<string>> } = $props();
 	const dateFormatter = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
@@ -162,10 +162,10 @@
 			return;
 		}
 		if (event.key === "Tab") {
-			const controls = viewer.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), textarea:not(:disabled)");
-			if (controls.length === 0) return;
+			const controls = viewer.querySelectorAll("button:not(:disabled), input:not(:disabled), textarea:not(:disabled)");
 			const first = controls.item(0);
 			const last = controls.item(controls.length - 1);
+			if (!(first instanceof HTMLElement) || !(last instanceof HTMLElement)) return;
 			if (event.shiftKey && document.activeElement === first) {
 				event.preventDefault();
 				last.focus();
@@ -250,7 +250,7 @@
 				{#each column as photo (photo.id)}
 					<figure>
 						<button type="button" onclick={() => (selectedPhotoId = photo.id)} aria-label={`Open ${photo.title}`}>
-							<R2Image objectKey={photo.thumbnailR2Key} thumbHash={photo.thumbHash} alt={photo.title} width={photo.width} height={photo.height} />
+							<PhotoImage objectKey={photo.thumbnailKey} thumbHash={photo.thumbHash} alt={photo.title} width={photo.width} height={photo.height} />
 						</button>
 						<figcaption><strong>{photo.title}</strong>{#if photo.date}<span>{dateFormatter.format(new Date(photo.date))}</span>{/if}<div>{#each photo.tags as tag (tag)}<span>#{tag}</span>{/each}</div></figcaption>
 					</figure>
@@ -278,8 +278,8 @@
 					<button class="viewer-previous" type="button" onclick={() => (selectedPhotoId = previousPhoto.id)} aria-label="Previous photo"><ChevronLeft size={22} /></button>
 				{/if}
 				<div class="viewer-image">
-					{#key selectedPhoto.r2Key}
-						<R2Image objectKey={selectedPhoto.r2Key} previewObjectKey={selectedPhoto.thumbnailR2Key} thumbHash={selectedPhoto.thumbHash} alt={selectedPhoto.title} width={selectedPhoto.width} height={selectedPhoto.height} eager fit="contain" retryable />
+					{#key selectedPhoto.imageKey}
+						<PhotoImage objectKey={selectedPhoto.imageKey} previewObjectKey={selectedPhoto.thumbnailKey} thumbHash={selectedPhoto.thumbHash} alt={selectedPhoto.title} width={selectedPhoto.width} height={selectedPhoto.height} eager fit="contain" retryable />
 					{/key}
 				</div>
 				{#if adjacentPhotos.next !== null}

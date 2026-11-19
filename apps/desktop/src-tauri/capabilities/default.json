@@ -3,10 +3,5 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "notification:default",
-    "opener:default",
-    "core:window:allow-set-theme"
-  ]
+  "permissions": ["core:default", "opener:default", "core:window:allow-set-theme"]
 }

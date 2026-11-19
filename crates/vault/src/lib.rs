@@ -23,8 +23,6 @@ pub enum Error {
     Database(#[from] database::Error),
     #[error("credential database operation failed: {0}")]
     Query(#[from] diesel::result::Error),
-    #[error("credential store coordination failed: {0}")]
-    StoreIo(#[from] std::io::Error),
     #[error("credential store synchronization is unavailable")]
     StoreSynchronization,
     #[error("stored credential collection is invalid")]
@@ -46,10 +44,6 @@ pub enum Error {
     #[cfg(debug_assertions)]
     #[error("could not load development credentials from {}; check the file syntax and permissions", path.display())]
     DevelopmentFile { path: std::path::PathBuf },
-}
-
-pub fn lock(account: &str) -> Result<std::fs::File, Error> {
-    store::lock(&database::directory()?.join(format!("{account}.lock")))
 }
 
 pub fn read_json<T: DeserializeOwned>(account: &str) -> Result<Stored<T>, Error> {

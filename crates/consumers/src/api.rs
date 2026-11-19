@@ -8,6 +8,21 @@ use std::fmt::{self, Display, Formatter};
 use std::time::Duration;
 
 pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const VESPER_API: &str = "https://noted-this.date/api";
+
+/// A Vesper resource URL whose ID is encoded as a single path segment.
+fn resource_url(collection: &str, id: &str) -> Result<reqwest::Url, ApiError> {
+    if id.trim().is_empty() {
+        return Err(ApiError::Protocol("an ID is required".to_owned()));
+    }
+    let mut url = reqwest::Url::parse(&format!("{VESPER_API}/{collection}/"))
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint is invalid".to_owned()))?;
+    url.path_segments_mut()
+        .map_err(|_| ApiError::Protocol("the Vesper endpoint cannot contain an ID".to_owned()))?
+        .pop_if_empty()
+        .push(id);
+    Ok(url)
+}
 
 /// An authenticated HTTP client for one consumer service.
 struct Client {
@@ -50,7 +65,6 @@ pub enum ApiError {
     SignedOut,
     Identity(oauth::Error),
     Media(moment::MediaError),
-    Store(cms::r2::StoreError),
     Request(reqwest::Error),
     Status {
         operation: &'static str,
@@ -70,7 +84,6 @@ impl Display for ApiError {
             Self::SignedOut => write!(formatter, "sign in with your Vesper account"),
             Self::Identity(source) => write!(formatter, "Vesper sign-in failed: {source}"),
             Self::Media(source) => Display::fmt(source, formatter),
-            Self::Store(source) => Display::fmt(source, formatter),
             Self::Request(source) => write!(formatter, "consumer API request failed: {source}"),
             Self::Status { operation, status } => {
                 write!(formatter, "consumer API {operation} returned {status}")
@@ -89,7 +102,6 @@ impl Error for ApiError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Credentials(source) => Some(source),
-            Self::Store(source) => Some(source),
             Self::Request(source) => Some(source),
             Self::Media(source) => Some(source),
             Self::Identity(source) => Some(source),
@@ -103,12 +115,6 @@ impl Error for ApiError {
 impl From<vault::Error> for ApiError {
     fn from(source: vault::Error) -> Self {
         Self::Credentials(source)
-    }
-}
-
-impl From<cms::r2::StoreError> for ApiError {
-    fn from(source: cms::r2::StoreError) -> Self {
-        Self::Store(source)
     }
 }
 

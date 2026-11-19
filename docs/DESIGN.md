@@ -275,15 +275,12 @@ textual counts and accessible labels, without implying data the provider does no
 Settings keeps account selection distinct per game; closing authorization or verification preserves
 settled content. Game status and verification copy use English. [Games](GAMES.md) owns provider flows.
 
-## Newspaper and Inbox
+## Newspaper
 
 Newspaper presents the latest AIHOT daily on a warm paper surface: a serif masthead, the lead story,
 labelled sections of summarized items, and timed flashes. A skeleton covers only the first read;
 background refresh keeps the settled paper and shows failures beside it. Every link opens the
 default browser, and the footer credits AIHOT.
-
-Inbox is independent of Dashboard. Unreadable storage displays an error, never a false empty state.
-Replayed notifications populate history; only new live messages may trigger system notifications.
 
 ## Accessibility
 

@@ -9,7 +9,6 @@ mod content;
 mod dashboard;
 mod games;
 mod identity;
-mod inbox;
 mod island;
 mod ledger;
 mod music;
@@ -87,7 +86,6 @@ pub fn run() {
         .manage(music::Music::default())
         .manage(dashboard::Runtime::default())
         .manage(updater::UpdateState::default())
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -124,7 +122,6 @@ pub fn run() {
             app.manage(::games::Runtime::new(database::path()?));
             app.manage(::todo::Store::shared()?);
             app.manage(::ledger::Store::new(database::path()?));
-            app.manage(::inbox::Inbox::new(database::path()?));
             island::sync(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -201,9 +198,6 @@ pub fn run() {
             games::read_steam_games,
             games::read_gacha_archive,
             games::sync_gacha_archive,
-            inbox::set_notifications_active,
-            inbox::read_notifications,
-            inbox::mark_notification_read,
             island::island_available,
             island::read_island_visible,
             island::set_island_visible,
@@ -227,10 +221,8 @@ pub fn run() {
             settings::read_configuration,
             settings::save_ugos_configuration,
             settings::save_nowledge_configuration,
-            settings::save_r2_configuration,
             identity::sign_in,
             identity::sign_out,
-            settings::save_ntfy_configuration,
             settings::save_notion_calendar,
             settings::save_codex_resets,
             social::publish_telegram,

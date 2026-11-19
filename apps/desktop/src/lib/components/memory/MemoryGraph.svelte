@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation, type SimulationNodeDatum } from "d3-force";
 	import { select } from "d3-selection";
-	import { zoom, zoomIdentity } from "d3-zoom";
+	import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 	import type { MemoryGraph, MemoryNodeKind } from "@/lib/contracts/nowledge";
 	import { memoryKinds } from "./kinds";
 
@@ -76,7 +76,7 @@
 		const behavior = zoom<SVGSVGElement, unknown>()
 			.scaleExtent([0.25, 4])
 			.filter((event: Event) => !(event.target instanceof Element && event.target.closest(".node") !== null) && !(event instanceof MouseEvent && event.button !== 0))
-			.on("zoom", (event: { transform: typeof zoomIdentity }) => {
+			.on("zoom", (event: { transform: ZoomTransform }) => {
 				transform = event.transform;
 			});
 		const selection = select(element).call(behavior);

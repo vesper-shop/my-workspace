@@ -4,7 +4,7 @@ pub(crate) mod moment;
 
 use crate::CommandResponse;
 use consumers::api::memos::ListFilters;
-use consumers::view::{Channel, ChannelView, Repository};
+use consumers::view::{Channel, ChannelView};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
@@ -114,7 +114,6 @@ impl AssetCache {
 }
 
 pub(crate) struct Content {
-    repository: tokio::sync::Mutex<Option<Arc<Repository>>>,
     views: tokio::sync::Mutex<ViewCache>,
     assets: tokio::sync::Mutex<AssetCache>,
     pub(crate) knowledge: knowledge::Reader,
@@ -123,7 +122,6 @@ pub(crate) struct Content {
 impl Default for Content {
     fn default() -> Self {
         Self {
-            repository: tokio::sync::Mutex::new(None),
             views: tokio::sync::Mutex::new(ViewCache::default()),
             assets: tokio::sync::Mutex::new(AssetCache::default()),
             knowledge: knowledge::Reader::default(),
@@ -132,22 +130,6 @@ impl Default for Content {
 }
 
 impl Content {
-    pub(crate) async fn repository(&self) -> Result<Option<Arc<Repository>>, String> {
-        let mut state = self.repository.lock().await;
-        if let Some(repository) = state.as_ref() {
-            return Ok(Some(Arc::clone(repository)));
-        }
-        let Some(store) = ::cms::r2::Store::configured()
-            .await
-            .map_err(|error| error.to_string())?
-        else {
-            return Ok(None);
-        };
-        let repository = Arc::new(Repository::new(store));
-        *state = Some(Arc::clone(&repository));
-        Ok(Some(repository))
-    }
-
     pub(crate) async fn clear_assets(&self) {
         self.assets.lock().await.clear();
     }
@@ -176,13 +158,10 @@ impl Content {
         let result = match loaded.as_ref() {
             Some(result) => result.clone(),
             None => {
-                let result = match self.repository().await {
-                    Ok(repository) => consumers::view::asset(key, repository.as_deref())
-                        .await
-                        .map(Arc::new)
-                        .map_err(|error| error.to_string()),
-                    Err(message) => Err(message),
-                };
+                let result = consumers::api::moment::image(key)
+                    .await
+                    .map(Arc::new)
+                    .map_err(|error| error.to_string());
                 *loaded = Some(result.clone());
                 result
             }
@@ -211,7 +190,6 @@ impl Content {
     pub(crate) async fn reset(&self) {
         self.reset_views().await;
         self.clear_assets().await;
-        *self.repository.lock().await = None;
     }
 
     pub(crate) async fn reset_views(&self) {
@@ -232,7 +210,6 @@ impl Content {
         let cacheable = cursor.is_none()
             && filters.search.is_none()
             && filters.tags.is_empty()
-            && !filters.sort_by_updated
             && !filters.archived_only
             && !filters.favorites_only;
         self.load_view(channel, cacheable, read_cached_first_page, async move {
@@ -316,7 +293,6 @@ pub(crate) struct ChannelQuery {
     cursor: Option<String>,
     search: Option<String>,
     tags: Vec<String>,
-    sort_by_updated: bool,
     archived_only: bool,
     favorites_only: bool,
 }
@@ -366,10 +342,8 @@ pub(crate) async fn read_channel(
             channel,
             cursor: query.cursor,
             filters: ListFilters {
-                limit: None,
                 search: query.search,
                 tags: query.tags,
-                sort_by_updated: query.sort_by_updated,
                 archived_only: query.archived_only,
                 favorites_only: query.favorites_only,
             },

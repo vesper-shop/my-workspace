@@ -3,7 +3,7 @@
 	import type { ExchangeRate, ExchangeReport } from "@/lib/contracts/dashboard";
 
 	let { report, error }: { report: ExchangeReport | null; error: string | null } = $props();
-	const pairs = ["USD", "GBP", "EUR"] as const;
+	const pairs = ["USD", "GBP", "EUR"];
 	const rateFormatter = new Intl.NumberFormat("zh-CN", {
 		minimumFractionDigits: 4,
 		maximumFractionDigits: 4,
@@ -30,7 +30,7 @@
 		};
 	}
 
-	let rows = $derived(pairs.map(calculatePair).filter((value): value is NonNullable<typeof value> => value !== null));
+	let rows = $derived(pairs.map(calculatePair).filter((value) => value !== null));
 	let date = $derived.by(() => {
 		const cny = findRate("CNY");
 		return cny === null ? null : cny.date;

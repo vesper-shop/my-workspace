@@ -6,11 +6,12 @@
 	let panel = $state<HTMLDetailsElement | null>(null);
 
 	function scrollTo(entry: TocEntry) {
-		const heading = Array.from(content?.querySelectorAll<HTMLElement>("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]") ?? []).find((heading) => heading.id === entry.id);
-		const scroller = content?.closest("main");
-		if (heading === undefined || scroller === null || scroller === undefined) return;
+		if (content === null) return;
+		const heading = content.querySelector(`:is(h1, h2, h3, h4, h5, h6)#${CSS.escape(entry.id)}`);
+		const scroller = content.closest("main");
+		if (heading === null || scroller === null) return;
 		if (panel !== null) panel.open = false;
-		const margin = Number.parseFloat(getComputedStyle(heading).scrollMarginTop) || 0;
+		const margin = Number.parseFloat(getComputedStyle(heading).scrollMarginTop);
 		scroller.scrollTo({ top: scroller.scrollTop + heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - scroller.clientTop - margin, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
 	}
 

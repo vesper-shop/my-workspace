@@ -24,12 +24,10 @@ const original: MemoView = {
 	html: "Original",
 	tags: [],
 	createdAt: "2026-09-10",
-	updatedAt: "2026-09-10",
 	visibility: "private",
 	pinned: false,
 	favorite: false,
 	archived: false,
-	metadataComplete: true,
 };
 function page(memos: MemoView[]): CommandResponse<ChannelView> {
 	return { status: "ready", data: { channel: "memos", memos, nextCursor: null } };
@@ -102,7 +100,7 @@ it("restarts a pending filter after a write without mixing its old cursor", asyn
 		if (command === "read_memo_tags") return Promise.resolve({ status: "ready", data: [] });
 		return Promise.resolve({ status: "ready", data: { ...original, content: "Saved" } });
 	});
-	const filter = session.filterMemos("new search", ["new-tag"], true, "active");
+	const filter = session.filterMemos("new search", ["new-tag"], "active");
 	await session.updateMemo(original.id, { content: "Saved", visibility: "private" });
 	expect(reads).toBe(2);
 	expect(invoke).toHaveBeenLastCalledWith("read_channel", {
@@ -111,7 +109,6 @@ it("restarts a pending filter after a write without mixing its old cursor", asyn
 			cursor: null,
 			search: "new search",
 			tags: ["new-tag"],
-			sortByUpdated: true,
 			archivedOnly: false,
 			favoritesOnly: false,
 		},
@@ -128,7 +125,7 @@ it("restarts a pending filter after a write without mixing its old cursor", asyn
 it("revalidates a settled search after creating a nonmatching memo", async () => {
 	const session = createMemosSession({ active: true, mainElement: null });
 	invoke.mockResolvedValue(page([]));
-	await session.filterMemos("search", [], false, "active");
+	await session.filterMemos("search", [], "active");
 	const current = deferred<CommandResponse<ChannelView>>();
 	invoke.mockImplementation((command: string) => {
 		if (command === "read_channel") return current.promise;

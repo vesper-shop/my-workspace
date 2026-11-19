@@ -4,7 +4,7 @@
 
 	let { media, frame }: { media: HTMLMediaElement; frame: HTMLElement } = $props();
 	const video = $derived(media instanceof HTMLVideoElement);
-	const title = $derived(media.getAttribute("aria-label") ?? (video ? "Video player" : "Audio player"));
+	const title = $derived(media.getAttribute("aria-label"));
 	let paused = $state(true);
 	let pending = $state(false);
 	let waiting = $state(false);

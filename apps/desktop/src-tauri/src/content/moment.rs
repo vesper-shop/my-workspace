@@ -1,6 +1,6 @@
 use super::Content;
 use crate::{CommandError, CommandResponse};
-use consumers::api::moment::{self, MetadataPolicy, Photo, PhotoMetadata, Update, Upload};
+use consumers::api::moment::{self, Photo, PhotoMetadata, Update, Upload};
 use consumers::view::Channel;
 use tauri::Manager;
 
@@ -22,8 +22,7 @@ pub(crate) async fn create_photo(
 ) -> CommandResponse<Photo> {
     let state = app.state::<Content>();
     let result = async {
-        input.validate()?;
-        let photo = moment::upload(input, source, MetadataPolicy::Reviewed).await?;
+        let photo = moment::upload(input, source).await?;
         state.invalidate_view(Channel::Moment).await;
         Ok::<_, CommandError>(photo)
     };

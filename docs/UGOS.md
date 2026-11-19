@@ -27,8 +27,7 @@ DashboardView UGREEN widgets
 Desktop requests require both an active Dashboard route and at least one saved UGREEN widget.
 Startup or credential saves on another route do not start NAS polling. Polling runs every two
 seconds while enabled; leaving Dashboard cancels queued and in-flight Dashboard reads. Each source
-settles independently so NAS failure does not block unrelated Dashboard cards. The CLI can also
-request the same Rust snapshot explicitly through its status command, outside the desktop route gate.
+settles independently so NAS failure does not block unrelated Dashboard cards.
 
 ## Connection and login
 

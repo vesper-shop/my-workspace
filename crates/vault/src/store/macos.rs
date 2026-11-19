@@ -1,10 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::{Read, Seek, Write};
-use std::path::Path;
 use std::sync::Mutex;
 
-use super::lock;
 use crate::{Error, SERVICE, Stored};
 
 const ACCOUNT: &str = "credentials";
@@ -21,15 +17,15 @@ struct Credentials {
 }
 
 trait Backend {
-    fn read(&self, account: &str) -> Result<Stored<String>, Error>;
+    fn read(&self) -> Result<Stored<String>, Error>;
     fn save(&self, value: &str) -> Result<(), Error>;
 }
 
 struct Keychain;
 
 impl Backend for Keychain {
-    fn read(&self, account: &str) -> Result<Stored<String>, Error> {
-        super::system::read_entry(account)
+    fn read(&self) -> Result<Stored<String>, Error> {
+        super::system::read_entry(ACCOUNT)
     }
 
     fn save(&self, value: &str) -> Result<(), Error> {
@@ -38,97 +34,65 @@ impl Backend for Keychain {
     }
 }
 
+/// All credentials live in one Keychain item, read once per process and cached.
 struct CredentialStore<B> {
     backend: B,
-    cache: Option<([u8; 16], Credentials)>,
+    cache: Option<Credentials>,
 }
 
 impl<B: Backend> CredentialStore<B> {
-    fn load(&mut self, file: &mut File) -> Result<Credentials, Error> {
-        file.rewind()?;
-        let mut bytes = Vec::new();
-        file.take(17).read_to_end(&mut bytes)?;
-        let revision = <[u8; 16]>::try_from(bytes.as_slice()).ok();
-        if let Some((cached_revision, credentials)) = &self.cache
-            && revision == Some(*cached_revision)
-        {
-            return Ok(credentials.clone());
-        }
-        self.cache = None;
-        let credentials = match self.backend.read(ACCOUNT)? {
-            Stored::Ready(encoded) => {
-                serde_json::from_str(&encoded).map_err(|_| Error::InvalidStore)?
-            }
-            Stored::Missing => Credentials::default(),
+    fn load(&mut self) -> Result<&mut Credentials, Error> {
+        let credentials = match self.cache.take() {
+            Some(credentials) => credentials,
+            None => match self.backend.read()? {
+                Stored::Ready(encoded) => {
+                    serde_json::from_str(&encoded).map_err(|_| Error::InvalidStore)?
+                }
+                Stored::Missing => Credentials::default(),
+            },
         };
-        let revision = match revision {
-            Some(revision) => revision,
-            None => advance_revision(file)?,
-        };
-        self.cache = Some((revision, credentials.clone()));
-        Ok(credentials)
+        Ok(self.cache.insert(credentials))
     }
 
-    fn persist(&mut self, file: &mut File, credentials: &Credentials) -> Result<(), Error> {
-        let encoded = serde_json::to_string(credentials)?;
-        self.cache = None;
-        let revision = advance_revision(file)?;
-        self.backend.save(&encoded)?;
-        self.cache = Some((revision, credentials.clone()));
-        Ok(())
+    fn read(&mut self, account: &str) -> Result<Stored<String>, Error> {
+        Ok(match self.load()?.entries.get(account) {
+            Some(value) => Stored::Ready(value.clone()),
+            None => Stored::Missing,
+        })
     }
 
-    fn read(&mut self, path: &Path, account: &str) -> Result<Stored<String>, Error> {
-        let mut file = lock(path)?;
-        match self.load(&mut file)?.entries.remove(account) {
-            Some(value) => Ok(Stored::Ready(value)),
-            None => Ok(Stored::Missing),
-        }
-    }
-
-    fn save(&mut self, path: &Path, account: &str, value: Option<&str>) -> Result<(), Error> {
-        let mut file = lock(path)?;
-        let mut credentials = self.load(&mut file)?;
-        if credentials.entries.get(account).map(String::as_str) == value {
+    fn save(&mut self, account: &str, value: Option<&str>) -> Result<(), Error> {
+        let current = self.load()?;
+        if current.entries.get(account).map(String::as_str) == value {
             return Ok(());
         }
+        let mut next = current.clone();
         match value {
             Some(value) => {
-                credentials
-                    .entries
-                    .insert(account.to_owned(), value.to_owned());
+                next.entries.insert(account.to_owned(), value.to_owned());
             }
             None => {
-                credentials.entries.remove(account);
+                next.entries.remove(account);
             }
         }
-        self.persist(&mut file, &credentials)
+        self.backend.save(&serde_json::to_string(&next)?)?;
+        self.cache = Some(next);
+        Ok(())
     }
-}
-
-fn advance_revision(file: &mut File) -> Result<[u8; 16], Error> {
-    let revision = *uuid::Uuid::new_v4().as_bytes();
-    file.rewind()?;
-    file.set_len(0)?;
-    file.write_all(&revision)?;
-    file.sync_data()?;
-    Ok(revision)
 }
 
 pub(super) fn read(account: &str) -> Result<Stored<String>, Error> {
-    let path = database::directory()?.join("credentials.lock");
     STORE
         .lock()
         .map_err(|_| Error::StoreSynchronization)?
-        .read(&path, account)
+        .read(account)
 }
 
 pub(super) fn save(account: &str, value: Option<&str>) -> Result<(), Error> {
-    let path = database::directory()?.join("credentials.lock");
     STORE
         .lock()
         .map_err(|_| Error::StoreSynchronization)?
-        .save(&path, account, value)
+        .save(account, value)
 }
 
 #[cfg(test)]

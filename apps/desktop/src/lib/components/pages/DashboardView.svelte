@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Activity, ArrowLeftRight, ChartNoAxesCombined, Check, Pin, ChevronRight, CloudSun, Cpu, Gauge, HardDrive, ListTodo, MemoryStick, Network, Plus, RefreshCw, RotateCcw, Settings2, ShieldCheck, Sparkles, WalletCards, X } from "@lucide/svelte";
 	import { Button } from "@my-workspace/ui";
-	import type { WidgetPlacement, ServiceStatusCatalogEntry } from "@/lib/contracts/dashboard";
+	import type { WidgetKind, WidgetPlacement, ServiceStatusCatalogEntry } from "@/lib/contracts/dashboard";
 	import { widgetCategories, widgetCategoryLabel, widgetKey, widgetOptions, widgets } from "../../dashboard";
 	import type { WidgetCategory } from "../../dashboard";
 	import WidgetContent from "../dashboard/WidgetContent.svelte";
@@ -146,15 +146,15 @@
 		if (draggingId === null) return;
 		let target: HTMLElement | null = null;
 		for (const element of document.elementsFromPoint(event.clientX, event.clientY)) {
-			const candidate = element.closest<HTMLElement>("[data-widget-id]");
-			if (candidate !== null) {
+			const candidate = element.closest("[data-widget-id]");
+			if (candidate instanceof HTMLElement) {
 				target = candidate;
 				break;
 			}
 		}
 		if (target === null) return;
-		const targetId = target.dataset.widgetId;
-		if (typeof targetId !== "string") return;
+		const targetId = target.getAttribute("data-widget-id");
+		if (targetId === null) return;
 		if (draggingId === null || draggingId === targetId) return;
 		const sourceIndex = layout.findIndex((item) => item.id === draggingId);
 		const targetIndex = layout.findIndex((item) => item.id === targetId);
@@ -209,7 +209,7 @@
 
 </script>
 
-<svelte:window onpointerup={(event) => void finishDragging(event)} onpointercancel={(event) => void finishDragging(event)} />
+<svelte:window onkeydown={(event) => { if (widgetLibraryOpen && event.key === "Escape") widgetLibraryOpen = false; }} onpointerup={(event) => void finishDragging(event)} onpointercancel={(event) => void finishDragging(event)} />
 
 <section data-content-typography class="dashboard" aria-label="Dashboard">
 	<header class="page-header">
@@ -303,8 +303,10 @@
 	{/if}
 </section>
 
+{#snippet kindIcon(kind: WidgetKind, size: number)}{#if kind === "cpu" || kind === "localCpu"}<Cpu {size} />{:else if kind === "memory" || kind === "localMemory"}<MemoryStick {size} />{:else if kind === "storage" || kind === "localStorage"}<HardDrive {size} />{:else if kind === "network" || kind === "localNetwork"}<Network {size} />{:else if kind === "codex" || kind === "openCode" || kind === "claude" || kind === "grok" || kind === "copilot" || kind === "tokenFlux" || kind === "dimAgent"}<Gauge {size} />{:else if kind === "spending" || kind === "deepSeek" || kind === "cherryIn"}<WalletCards {size} />{:else if kind === "planner"}<ListTodo {size} />{:else if kind === "stock"}<ChartNoAxesCombined {size} />{:else if kind === "exchange"}<ArrowLeftRight {size} />{:else if kind === "weather"}<CloudSun {size} />{:else if kind === "serviceStatus"}<ShieldCheck {size} />{:else}<Sparkles {size} />{/if}{/snippet}
+
 {#if widgetLibraryOpen}
-	<div class="widget-library-backdrop" role="presentation" onclick={(event) => { if (event.currentTarget === event.target) widgetLibraryOpen = false; }} onkeydown={(event) => { if (event.key === "Escape") widgetLibraryOpen = false; }}>
+	<div class="widget-library-backdrop" role="presentation" onclick={(event) => { if (event.currentTarget === event.target) widgetLibraryOpen = false; }}>
 		<div class="widget-library" role="dialog" aria-modal="true" aria-labelledby="widget-library-title">
 			<header class="library-header">
 				<div><span>Widget Library</span><h2 id="widget-library-title">Add Widget</h2></div>
@@ -321,7 +323,7 @@
 						{#each categoryWidgets as option (option.id)}
 							{@const added = option.kind !== "weather" && option.kind !== "stock" && option.kind !== "serviceStatus" && layout.some((item) => widgetKey(item.widget) === option.id)}
 							<button type="button" class:selected={selectedWidget !== null && selectedWidget.id === option.id} class:added onclick={() => { selectedWidgetId = option.id; widgetFormError = null; }}>
-								<span class="library-list-icon">{#if option.kind === "cpu" || option.kind === "localCpu"}<Cpu size={16} />{:else if option.kind === "memory" || option.kind === "localMemory"}<MemoryStick size={16} />{:else if option.kind === "storage" || option.kind === "localStorage"}<HardDrive size={16} />{:else if option.kind === "network" || option.kind === "localNetwork"}<Network size={16} />{:else if option.kind === "codex" || option.kind === "openCode" || option.kind === "claude" || option.kind === "grok" || option.kind === "copilot" || option.kind === "tokenFlux" || option.kind === "dimAgent"}<Gauge size={16} />{:else if option.kind === "spending" || option.kind === "deepSeek" || option.kind === "cherryIn"}<WalletCards size={16} />{:else if option.kind === "planner"}<ListTodo size={16} />{:else if option.kind === "stock"}<ChartNoAxesCombined size={16} />{:else if option.kind === "exchange"}<ArrowLeftRight size={16} />{:else if option.kind === "weather"}<CloudSun size={16} />{:else if option.kind === "serviceStatus"}<ShieldCheck size={16} />{:else}<Sparkles size={16} />{/if}</span>
+								<span class="library-list-icon">{@render kindIcon(option.kind, 16)}</span>
 								<span>{option.label}<small>{added ? "Added" : option.description}</small></span>
 								{#if added}<Check size={13} />{:else}<ChevronRight size={13} />{/if}
 							</button>
@@ -334,7 +336,7 @@
 						<div class="preview-copy"><span>{widgetCategoryLabel(selectedWidget.category)}</span><h3>{selectedWidget.label}</h3><p>{selectedWidget.description}</p></div>
 						<div class="widget-preview">
 							<div class="preview-card">
-								<span class="preview-app-icon">{#if selectedWidget.kind === "cpu" || selectedWidget.kind === "localCpu"}<Cpu size={22} />{:else if selectedWidget.kind === "memory" || selectedWidget.kind === "localMemory"}<MemoryStick size={22} />{:else if selectedWidget.kind === "storage" || selectedWidget.kind === "localStorage"}<HardDrive size={22} />{:else if selectedWidget.kind === "network" || selectedWidget.kind === "localNetwork"}<Network size={22} />{:else if selectedWidget.kind === "codex" || selectedWidget.kind === "openCode" || selectedWidget.kind === "claude" || selectedWidget.kind === "grok" || selectedWidget.kind === "copilot" || selectedWidget.kind === "tokenFlux" || selectedWidget.kind === "dimAgent"}<Gauge size={22} />{:else if selectedWidget.kind === "spending" || selectedWidget.kind === "deepSeek" || selectedWidget.kind === "cherryIn"}<WalletCards size={22} />{:else if selectedWidget.kind === "planner"}<ListTodo size={22} />{:else if selectedWidget.kind === "stock"}<ChartNoAxesCombined size={22} />{:else if selectedWidget.kind === "exchange"}<ArrowLeftRight size={22} />{:else if selectedWidget.kind === "weather"}<CloudSun size={22} />{:else if selectedWidget.kind === "serviceStatus"}<ShieldCheck size={22} />{:else}<Sparkles size={22} />{/if}</span>
+								<span class="preview-app-icon">{@render kindIcon(selectedWidget.kind, 22)}</span>
 								<div><strong>{selectedWidget.label}</strong><span>{selectedWidget.description}</span></div>
 								<div class="preview-lines"><i></i><i></i><i></i></div>
 							</div>

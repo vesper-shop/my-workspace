@@ -112,10 +112,6 @@ pub(crate) fn occurrences(input: &str, date: Date) -> Result<Vec<Occurrence>, St
     Ok(occurrences)
 }
 
-pub(crate) fn validate(input: &str) -> Result<(), String> {
-    parse(input).map(|_| ())
-}
-
 impl Event {
     fn candidate_dates(&self, target: Date) -> Vec<Date> {
         if self.start.time.is_none() || matches!(self.start.time_reference, TimeReference::Floating)
@@ -719,14 +715,14 @@ mod tests {
             "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:bad\nSUMMARY:Bad\nDTSTART:20260901\nRDATE:20260902\nEND:VEVENT\nEND:VCALENDAR\n",
             "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:bad\nSUMMARY:Bad\nDTSTART:20260901T090000\nDURATION:PT1H\nEND:VEVENT\nEND:VCALENDAR\n",
         ] {
-            assert!(validate(input).is_err());
+            assert!(parse(input).is_err());
         }
     }
 
     #[test]
     fn projects_time_zones() {
         let calendar = "BEGIN:VCALENDAR\nBEGIN:VTIMEZONE\nTZID:Europe/London\nBEGIN:DAYLIGHT\nDTSTART:19700329T010000\nRRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU\nEND:DAYLIGHT\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:training\nSUMMARY:Training\nDTSTART;TZID=Europe/London:20260907T073000\nDTEND;TZID=Europe/London:20260907T083000\nRRULE:FREQ=WEEKLY;COUNT=12\nEND:VEVENT\nEND:VCALENDAR\n";
-        assert!(validate(calendar).is_ok());
+        assert!(parse(calendar).is_ok());
 
         let london = parse_ics_date(PropertyValue {
             value: "20260907T073000".to_owned(),
@@ -814,11 +810,9 @@ mod tests {
             let input = format!(
                 "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:event\nSUMMARY:Event\nDTSTART:20260901\n{body}\n"
             );
-            assert!(validate(&input).is_err(), "{body}");
+            assert!(parse(&input).is_err(), "{body}");
         }
-        assert!(
-            validate("BEGIN:VCALENDAR\nEND:VCALENDAR\nBEGIN:VCALENDAR\nEND:VCALENDAR\n").is_err()
-        );
+        assert!(parse("BEGIN:VCALENDAR\nEND:VCALENDAR\nBEGIN:VCALENDAR\nEND:VCALENDAR\n").is_err());
     }
 
     #[test]
@@ -892,7 +886,7 @@ mod tests {
             let input = format!(
                 "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:invalid\nSUMMARY:Invalid\nDTSTART:20260901\n{body}\nEND:VEVENT\nEND:VCALENDAR\n"
             );
-            assert!(validate(&input).is_err(), "{body}");
+            assert!(parse(&input).is_err(), "{body}");
         }
     }
 }

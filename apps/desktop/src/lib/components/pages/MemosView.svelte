@@ -13,7 +13,7 @@
 </script>
 
 <script lang="ts">
-	import { Archive, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Globe, Heart, Lock, Pencil, RotateCcw, Send, Share2, Star, Trash2, X, XCircle } from "@lucide/svelte";
+	import { Archive, Check, CheckCircle2, ChevronLeft, ChevronRight, Globe, Heart, Lock, Pencil, RotateCcw, Send, Share2, Star, Trash2, X, XCircle } from "@lucide/svelte";
 	import { Alert, AlertDescription, Badge, Button, Input } from "@my-workspace/ui";
 	import { openUrl } from "@tauri-apps/plugin-opener";
 	import type { Snippet } from "svelte";
@@ -41,11 +41,10 @@
 		tags: MemoTagCount[];
 		tagStatus?: Snippet;
 		display: "active" | "favorites" | "archived";
-		filters: { search: string; tags: string[]; sortByUpdated: boolean };
+		filters: { search: string; tags: string[] };
 		onfilter: (
 			search: string,
 			tags: string[],
-			sortByUpdated: boolean,
 			display: "active" | "favorites" | "archived",
 		) => Promise<string | null>;
 		onopenmemo: (id: string) => Promise<boolean>;
@@ -66,7 +65,6 @@
 	let search = $state(untrack(() => filters.search));
 	let selectedTags = $state<string[]>(untrack(() => filters.tags));
 	let pinnedOpen = $state(false);
-	let sortByUpdated = $state(untrack(() => filters.sortByUpdated));
 	let filtering = $state(false);
 	let filterVersion = 0;
 	let mutatingId = $state<string | null>(null);
@@ -118,7 +116,6 @@
 		const activeDisplay = display;
 		const query = activeDisplay !== "archived" ? search.trim() : "";
 		const activeTags = activeDisplay !== "archived" ? selectedTags : [];
-		const updatedOrder = activeDisplay !== "archived" && sortByUpdated;
 		if (!filtersReady) {
 			filtersReady = true;
 			return;
@@ -127,7 +124,7 @@
 		filtering = true;
 		const timer = window.setTimeout(
 			() =>
-				void onfilter(query, activeTags, updatedOrder, activeDisplay).then((message) => {
+				void onfilter(query, activeTags, activeDisplay).then((message) => {
 					if (version !== filterVersion) return;
 					filtering = false;
 					error = message === null ? "" : message;
@@ -482,19 +479,8 @@
 	{#if display !== "archived"}
 		<div class="search">
 			<span aria-hidden="true">⌕</span>
-			<Input class="h-10 px-10 pr-18 text-sm focus-visible:border-accent focus-visible:ring-0 focus-visible:ring-offset-0" bind:value={search} placeholder="Search memos..." aria-label="Search memos" />
+			<Input class="h-10 px-10 text-sm focus-visible:border-accent focus-visible:ring-0 focus-visible:ring-offset-0" bind:value={search} placeholder="Search memos..." aria-label="Search memos" />
 			{#if search}<button class="clear-search" type="button" onclick={() => (search = "")} aria-label="Clear search" title="Clear search">×</button>{/if}
-			<button
-				class="sort-updated"
-				class:active={sortByUpdated}
-				type="button"
-				onclick={() => (sortByUpdated = !sortByUpdated)}
-				aria-pressed={sortByUpdated}
-				aria-label={sortByUpdated ? "Sort by creation time" : "Sort by last updated time"}
-				title={sortByUpdated ? "Currently sorted by last update; switch to creation time" : "Sort by last updated time"}
-			>
-				<Clock3 size={13} />
-			</button>
 		</div>
 	{/if}
 
@@ -503,23 +489,21 @@
 			<article id="memo-{memo.id}" class:editing={editingId === memo.id} class:highlighted={highlightedId === memo.id}>
 				<header>
 					<time datetime={memo.createdAt}>{relativeTime(memo.createdAt)}</time>
-					{#if memo.metadataComplete}
-						<span class="dot">·</span>
-						<span class="visibility-label">
-							{#if memo.visibility === "public"}<Globe size={11} /> Public{:else}<Lock size={11} /> Private{/if}
+					<span class="dot">·</span>
+					<span class="visibility-label">
+						{#if memo.visibility === "public"}<Globe size={11} /> Public{:else}<Lock size={11} /> Private{/if}
+					</span>
+					{#if memo.visibility === "public"}
+						{@const telegramPublished = publications.has(`telegram:${memo.id}`)}
+						{@const xPublished = publications.has(`x:${memo.id}`)}
+						<span class="publication-actions" aria-label="Publish memo">
+							<button type="button" class:published={telegramPublished} disabled={publishing !== null || telegramPublished} onclick={() => publish(memo, "telegram")} aria-label={telegramPublished ? "Published to Telegram" : "Publish to Telegram"} title={telegramPublished ? "Published to Telegram" : "Publish to Telegram"}>
+								<Send size={11} />
+							</button>
+							<button type="button" class:published={xPublished} disabled={publishing !== null || xPublished} onclick={() => publish(memo, "x")} aria-label={xPublished ? "Published to X" : "Publish to X"} title={xPublished ? "Published to X" : "Publish to X"}>
+								{@render XLogo()}
+							</button>
 						</span>
-						{#if memo.visibility === "public"}
-							{@const telegramPublished = publications.has(`telegram:${memo.id}`)}
-							{@const xPublished = publications.has(`x:${memo.id}`)}
-							<span class="publication-actions" aria-label="Publish memo">
-								<button type="button" class:published={telegramPublished} disabled={publishing !== null || telegramPublished} onclick={() => publish(memo, "telegram")} aria-label={telegramPublished ? "Published to Telegram" : "Publish to Telegram"} title={telegramPublished ? "Published to Telegram" : "Publish to Telegram"}>
-									<Send size={11} />
-								</button>
-								<button type="button" class:published={xPublished} disabled={publishing !== null || xPublished} onclick={() => publish(memo, "x")} aria-label={xPublished ? "Published to X" : "Publish to X"} title={xPublished ? "Published to X" : "Publish to X"}>
-									{@render XLogo()}
-								</button>
-							</span>
-						{/if}
 					{/if}
 					<Badge variant="accent-outline" size="sm" class="ml-auto">{dateBadge(memo.createdAt)}</Badge>
 				</header>
@@ -859,25 +843,6 @@
 	.search button:focus-visible {
 		outline: 2px solid var(--color-accent);
 		outline-offset: 1px;
-	}
-
-	.search .clear-search {
-		right: 2.25rem;
-	}
-
-	.search .sort-updated {
-		display: grid;
-		place-items: center;
-	}
-
-	.search .sort-updated:hover {
-		background: var(--color-muted);
-		color: var(--color-foreground);
-	}
-
-	.search .sort-updated.active {
-		background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-		color: var(--color-accent);
 	}
 
 	.memo-list {

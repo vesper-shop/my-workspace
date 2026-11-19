@@ -40,20 +40,6 @@ CREATE TABLE IF NOT EXISTS credentials (
     account TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS notifications (
-    id TEXT PRIMARY KEY NOT NULL,
-    position INTEGER NOT NULL UNIQUE,
-    topic TEXT NOT NULL,
-    source TEXT NOT NULL,
-    title TEXT,
-    message TEXT NOT NULL,
-    timestamp BIGINT NOT NULL,
-    tags TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS notification_cursor (
-    id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
-    last_id TEXT
-);
 CREATE TABLE IF NOT EXISTS telegram_session (id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1), data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS memo_publications (
     memo_id TEXT NOT NULL, provider TEXT NOT NULL, external_id TEXT NOT NULL, url TEXT,

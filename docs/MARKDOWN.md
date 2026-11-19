@@ -99,7 +99,7 @@ https://knowledge.you-find.me/articles/22222222-2222-4222-8222-222222222222
 Only the host's authorized article index can resolve cards; there are no external previews or
 Open Graph fallbacks. Missing, external or unauthorized entries remain non-clickable without hiding
 valid siblings. Vesper also accepts single-entry `id`/`url` fields and title/description overrides;
-overrides cannot authorize a target. Static publication must supply an index.
+overrides cannot authorize a target.
 
 Knowledge resolves UUIDs through the authenticated summary index, including historical daily
 editions, then opens details by ID. Links retain chapter
@@ -127,15 +127,12 @@ using `preload="metadata"` and `#t=0.001`, preserving authored fragments. Audio 
 use `preload="none"`. Preview availability and codecs depend on the browser. Desktop adds seeking,
 volume, errors and fullscreen; leaving stops playback. No transcoding or preview image is stored.
 
-Local assets resolve relative to the Markdown file and must be regular files inside `content/`.
-Missing files, symlinks, outside-root paths and Markdown targets fail the build. Absolute filesystem
-paths, `~/`, `file:` and protocol-relative URLs are rejected. Spaces/non-ASCII names are encoded;
-use `%23`/`%3F` for literal filename characters. Serving applications must preserve published path
-resolution, including for `content.json`. Uploads stream with extension-based MIME types, defaulting
-to `application/octet-stream`.
+Relative paths stay relative URLs. Absolute filesystem paths, `~/`, `file:` and protocol-relative
+URLs are rejected. Spaces/non-ASCII names are encoded; use `%23`/`%3F` for literal filename
+characters.
 
 Remote media is not downloaded or availability-checked during compilation; GitHub file pages become
-raw URLs. Local paths belong to static publication, not desktop filesystem access or an upload flow.
+raw URLs.
 
 ## Quotes and Git diffs
 

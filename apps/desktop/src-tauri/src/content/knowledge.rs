@@ -182,7 +182,7 @@ pub(crate) async fn create_knowledge(
     app: tauri::AppHandle,
 ) -> CommandResponse<Document> {
     let result = async {
-        let article = knowledge::create(&knowledge::Create::Draft(input)).await?;
+        let article = knowledge::create(&input).await?;
         let document = knowledge::project_article(article).await?;
         app.state::<Content>()
             .invalidate_view(Channel::Knowledge)

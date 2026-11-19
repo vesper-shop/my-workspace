@@ -101,22 +101,6 @@ pub struct Draft {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct Documents {
-    pub zh: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub en: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ja: Option<String>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum Create {
-    Draft(Draft),
-    Documents { documents: Documents },
-}
-
-#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DraftUpdate {
     pub expected_hash: String,
@@ -127,22 +111,6 @@ pub struct DraftUpdate {
     pub summary: String,
     pub body: String,
     pub tags: Vec<String>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentUpdate {
-    pub expected_hash: String,
-    pub expected_updated_at: String,
-    pub documents: Documents,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VisibilityUpdate {
-    pub expected_hash: String,
-    pub expected_updated_at: String,
-    pub visibility: Visibility,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -393,7 +361,7 @@ pub async fn get(reference: &str) -> Result<Article, ApiError> {
     Ok(result.article)
 }
 
-pub async fn create(input: &Create) -> Result<Article, ApiError> {
+pub async fn create(input: &Draft) -> Result<Article, ApiError> {
     let client = Client::load().await?;
     let response = client
         .http
@@ -425,40 +393,6 @@ pub async fn update_draft(id: &str, input: &DraftUpdate) -> Result<Article, ApiE
         return Err(mutation_error(response, "update knowledge article").await);
     }
     let result: ArticleResponse<Article> = response.json().await?;
-    Ok(result.article)
-}
-
-pub async fn update_documents(id: &str, input: &DocumentUpdate) -> Result<Article, ApiError> {
-    let url = build_url(id)?;
-    let client = Client::load().await?;
-    let response = client
-        .http
-        .patch(url)
-        .bearer_auth(&client.token)
-        .json(input)
-        .send()
-        .await?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(mutation_error(response, "update knowledge documents").await);
-    }
-    let result: ArticleResponse<Article> = response.json().await?;
-    Ok(result.article)
-}
-
-pub async fn set_visibility(id: &str, input: &VisibilityUpdate) -> Result<Summary, ApiError> {
-    let url = build_url(id)?;
-    let client = Client::load().await?;
-    let response = send(
-        client
-            .http
-            .patch(url)
-            .bearer_auth(&client.token)
-            .json(input),
-        "set knowledge visibility",
-    )
-    .await?;
-    let result: ArticleResponse<Summary> = response.json().await?;
     Ok(result.article)
 }
 

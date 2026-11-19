@@ -14,7 +14,6 @@ pub(super) struct Prepared {
     pub width: u32,
     pub height: u32,
     pub thumb_hash: String,
-    pub metadata: super::PhotoMetadata,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -142,10 +141,6 @@ pub(super) fn prepare(source: &[u8]) -> Result<Prepared, Error> {
         width,
         height,
         thumb_hash,
-        metadata: super::PhotoMetadata {
-            captured_at: metadata.captured_at,
-            geo: metadata.geo,
-        },
     })
 }
 

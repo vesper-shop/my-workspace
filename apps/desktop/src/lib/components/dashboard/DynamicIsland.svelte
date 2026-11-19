@@ -19,7 +19,7 @@
 	let expanded = $state(false);
 	let contentReady = $state(false);
 	let hovered = $state(false);
-	let intentTimer: ReturnType<typeof setTimeout> | null = null;
+	let intentTimer: number | null = null;
 	let surface = $state<HTMLElement | null>(null);
 	let collapseButton = $state<HTMLButtonElement | null>(null);
 	const icons: Record<WidgetKind, typeof Layers> = {
@@ -34,14 +34,14 @@
 	const Icon = $derived(placement === null ? Layers : icons[placement.widget.kind]);
 
 	function clearIntent() {
-		if (intentTimer !== null) clearTimeout(intentTimer);
+		if (intentTimer !== null) window.clearTimeout(intentTimer);
 		intentTimer = null;
 	}
 
 	function leave() {
 		hovered = false;
 		clearIntent();
-		intentTimer = setTimeout(() => {
+		intentTimer = window.setTimeout(() => {
 			intentTimer = null;
 			if (!surface?.contains(document.activeElement)) close();
 		}, 280);
@@ -119,7 +119,7 @@
 			if (event.pointerType === "touch") return;
 			hovered = true;
 			clearIntent();
-			if (!expanded) intentTimer = setTimeout(() => { intentTimer = null; void expand(); }, 160);
+			if (!expanded) intentTimer = window.setTimeout(() => { intentTimer = null; void expand(); }, 160);
 		}}
 		onpointerleave={leave}
 		onfocusin={clearIntent}

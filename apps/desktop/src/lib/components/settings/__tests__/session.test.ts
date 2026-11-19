@@ -11,10 +11,7 @@ it.each<"ready" | "failed">(["ready", "failed"])(
 	async (status) => {
 		const current: ConfigurationStatus = {
 			ugos: { status: "missing" },
-			r2: { status: "missing" },
 			account: { status: "missing" },
-			ntfy: { status: "missing" },
-			ntfyDev: false,
 			notionCalendar: { status: "missing" },
 			codexResets: { enabled: false },
 			appLock: { status: "missing" },
@@ -34,7 +31,7 @@ it.each<"ready" | "failed">(["ready", "failed"])(
 		invoke.mockReset();
 		invoke.mockReturnValueOnce(pending).mockResolvedValueOnce({ status: "ready", data: current });
 		const session = createSettingsSession({
-			resetChannel: vi.fn(),
+			resetContent: vi.fn(),
 			initializeConsumers: vi.fn(),
 			refreshDashboard: vi.fn(),
 		});
@@ -58,7 +55,7 @@ it.each([true, false])(
 		invoke.mockResolvedValueOnce({ status: "ready", data: "codex-resets" });
 		invoke.mockResolvedValueOnce({ status: "failed", message: "Read unavailable" });
 		const session = createSettingsSession({
-			resetChannel: vi.fn(),
+			resetContent: vi.fn(),
 			initializeConsumers: vi.fn(),
 			refreshDashboard: vi.fn(),
 		});
@@ -76,7 +73,7 @@ it("returns a Codex Resets save failure without reloading configuration", async 
 	invoke.mockReset();
 	invoke.mockResolvedValueOnce({ status: "failed", message: "Settings unavailable" });
 	const session = createSettingsSession({
-		resetChannel: vi.fn(),
+		resetContent: vi.fn(),
 		initializeConsumers: vi.fn(),
 		refreshDashboard: vi.fn(),
 	});

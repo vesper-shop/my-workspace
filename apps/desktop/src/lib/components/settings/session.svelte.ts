@@ -1,18 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { CommandResponse } from "@/lib/contracts/command";
-import type { Channel } from "@/lib/contracts/content";
 import type {
 	CodexResets,
 	ConfigurationStatus,
 	NowledgeCredentials,
-	NtfyConfig,
 	NotionCalendar,
-	R2Configuration,
 	UgosConfiguration,
 } from "@/lib/contracts/settings";
 
 export function createSettingsSession(effects: {
-	resetChannel: (channel: Channel) => void;
+	resetContent: () => void;
 	initializeConsumers: () => Promise<void>;
 	refreshDashboard: () => Promise<void>;
 }) {
@@ -44,23 +41,10 @@ export function createSettingsSession(effects: {
 		return response;
 	}
 
-	async function saveR2Configuration(input: R2Configuration): Promise<CommandResponse<string>> {
-		const response = await invoke<CommandResponse<string>>("save_r2_configuration", {
-			accessKeyId: input.accessKeyId,
-			secretAccessKey: input.secretAccessKey,
-		});
-		if (response.status === "ready") {
-			await loadConfiguration();
-			await effects.initializeConsumers();
-		}
-		return response;
-	}
-
 	async function switchAccount(command: "sign_in" | "sign_out"): Promise<CommandResponse<string>> {
 		const response = await invoke<CommandResponse<string>>(command);
 		if (response.status === "ready") {
-			for (const channel of ["memos", "moment", "knowledge"] as const)
-				effects.resetChannel(channel);
+			effects.resetContent();
 			await loadConfiguration();
 			await effects.initializeConsumers();
 		}
@@ -88,14 +72,6 @@ export function createSettingsSession(effects: {
 
 	async function saveCodexResets(configuration: CodexResets): Promise<CommandResponse<string>> {
 		const response = await invoke<CommandResponse<string>>("save_codex_resets", {
-			configuration,
-		});
-		if (response.status === "ready") await loadConfiguration();
-		return response;
-	}
-
-	async function saveNtfy(configuration: NtfyConfig): Promise<CommandResponse<string>> {
-		const response = await invoke<CommandResponse<string>>("save_ntfy_configuration", {
 			configuration,
 		});
 		if (response.status === "ready") await loadConfiguration();
@@ -137,10 +113,8 @@ export function createSettingsSession(effects: {
 		},
 		loadConfiguration,
 		saveUgosConfiguration,
-		saveR2Configuration,
 		switchAccount,
 		connectSpotify,
-		saveNtfy,
 		saveNowledge,
 		saveNotionCalendar,
 		saveCodexResets,

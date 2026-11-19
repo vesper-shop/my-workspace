@@ -1,5 +1,4 @@
 use crate::api::memos::MemoView;
-use cms::r2::{Store, StoreError};
 use serde::Serialize;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -50,8 +49,6 @@ pub enum ChannelView {
 #[derive(Debug)]
 pub enum ConsumerError {
     UnknownChannel(String),
-    Store(StoreError),
-    Public(crate::api::ApiError),
 }
 
 impl Display for ConsumerError {
@@ -60,63 +57,11 @@ impl Display for ConsumerError {
             Self::UnknownChannel(channel) => {
                 write!(formatter, "unknown consumer channel: {channel}")
             }
-            Self::Store(source) => Display::fmt(source, formatter),
-            Self::Public(source) => Display::fmt(source, formatter),
         }
     }
 }
 
-impl Error for ConsumerError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Store(source) => Some(source),
-            Self::Public(source) => Some(source),
-            Self::UnknownChannel(..) => None,
-        }
-    }
-}
-
-impl From<StoreError> for ConsumerError {
-    fn from(source: StoreError) -> Self {
-        Self::Store(source)
-    }
-}
-
-pub struct Repository {
-    store: Store,
-}
-
-impl Repository {
-    pub const fn new(store: Store) -> Self {
-        Self { store }
-    }
-
-    pub const fn store(&self) -> &Store {
-        &self.store
-    }
-}
-
-pub async fn asset(key: &str, repository: Option<&Repository>) -> Result<Vec<u8>, ConsumerError> {
-    let outside_image_prefix = !key.starts_with("img/");
-    let has_reserved_char = key.contains(['\\', '%', '?', '#']);
-    let contains_parent_segment = key.split('/').any(|part| matches!(part, "." | ".."));
-    if outside_image_prefix || has_reserved_char || contains_parent_segment {
-        return Err(ConsumerError::Store(StoreError::Request(
-            "only img/ object keys can be displayed".to_owned(),
-        )));
-    }
-    if key.starts_with(crate::api::moment::KEY_PREFIX) {
-        return crate::api::moment::image(key)
-            .await
-            .map_err(ConsumerError::Public);
-    }
-    match repository {
-        Some(repository) => Ok(repository.store.get(key).await?),
-        None => Err(ConsumerError::Store(StoreError::Request(
-            "photos are served by Vesper".to_owned(),
-        ))),
-    }
-}
+impl Error for ConsumerError {}
 
 #[cfg(test)]
 #[path = "../tests/unit/view.rs"]

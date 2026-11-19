@@ -1,6 +1,6 @@
 <script lang="ts">
 	import "../settings/settings.css";
-	import { CalendarDays, BellRing, Brain, Cloud, Eye, EyeOff, KeyRound, Lock, Music2, QrCode, Send } from "@lucide/svelte";
+	import { CalendarDays, Brain, Cloud, Eye, EyeOff, KeyRound, Lock, Music2, QrCode, Send } from "@lucide/svelte";
 	import QqMusicConnection from "../settings/QqMusicConnection.svelte";
 	import ConfigurationBadge from "../settings/ConfigurationBadge.svelte";
 	import {
@@ -29,16 +29,13 @@
 		{ id: "publishing", label: "Publishing", icon: Send },
 	];
 	import type { CommandResponse } from "@/lib/contracts/command";
-	import type { CodexResets, ConfigurationStatus, NowledgeCredentials, NtfyConfig, NotionCalendar, R2Configuration, TelegramAuthorizationStatus, TelegramCredentials, UgosConfiguration } from "@/lib/contracts/settings";
+	import type { CodexResets, ConfigurationStatus, NowledgeCredentials, NotionCalendar, TelegramAuthorizationStatus, TelegramCredentials, UgosConfiguration } from "@/lib/contracts/settings";
 
 	let {
 		reconnectMihoyo,
 		configuration,
 		error,
 		onsaveugos,
-		onsaver2,
-		onswitchaccount,
-		onsaventfy,
 		onsavenowledge,
 		onsavenotion,
 		onsavecodexresets,
@@ -51,11 +48,8 @@
 		configuration: ConfigurationStatus | null;
 		error: string | null;
 		onsaveugos: (input: UgosConfiguration) => Promise<CommandResponse<string>>;
-		onsaver2: (input: R2Configuration) => Promise<CommandResponse<string>>;
 		onsavecodexresets: (configuration: CodexResets) => Promise<CommandResponse<string>>;
 		onsavenotion: (configuration: NotionCalendar) => Promise<CommandResponse<string>>;
-		onswitchaccount: (command: "sign_in" | "sign_out") => Promise<CommandResponse<string>>;
-		onsaventfy: (configuration: NtfyConfig) => Promise<CommandResponse<string>>;
 		onsavenowledge: (credentials: NowledgeCredentials) => Promise<CommandResponse<string>>;
 		onsaveapplock: (password: string) => Promise<CommandResponse<string>>;
 		onremoveapplock: () => Promise<CommandResponse<string>>;
@@ -75,24 +69,18 @@
 		savedSpotifyClientId = saved;
 	});
 	let password = $state("");
-	let accessKeyId = $state("");
-	let secretAccessKey = $state("");
 	let codexResetsEnabled = $state(false);
 	let codexResetsSaving = $state(false);
 	let codexResetsError = $state<string | null>(null);
 	let notionViewUrl = $state("");
 	let notionSaving = $state(false);
 	let notionError = $state<string | null>(null);
-	let ntfyToken = $state("");
 	let nowledgeUrl = $state("");
 	let nowledgeApiKey = $state("");
 	let appLockPassword = $state("");
 	let saving = $state({
 		"app-lock": false,
 		ugos: false,
-		r2: false,
-		account: false,
-		ntfy: false,
 		nowledge: false,
 		spotify: false,
 		telegram: false,
@@ -101,8 +89,6 @@
 	});
 	let saved = $state({
 		ugos: { username: "", password: "" },
-		r2: { accessKeyId: "", secretAccessKey: "" },
-		ntfy: { token: "", development: false },
 		nowledge: { url: "", apiKey: "" },
 		appLock: "",
 		notion: "",
@@ -113,9 +99,6 @@
 	let formErrors = $state<Record<keyof typeof saving, string | null>>({
 		"app-lock": null,
 		ugos: null,
-		r2: null,
-		account: null,
-		ntfy: null,
 		nowledge: null,
 		spotify: null,
 		telegram: null,
@@ -123,8 +106,6 @@
 		x: null,
 	});
 	let passwordVisible = $state(false);
-	let secretVisible = $state(false);
-	let ntfyTokenVisible = $state(false);
 	let nowledgeKeyVisible = $state(false);
 	let appLockPasswordVisible = $state(false);
 	let telegramApiId = $state("");
@@ -150,17 +131,6 @@
 			username.trim() !== "" &&
 			password !== "" &&
 			(username.trim() !== saved.ugos.username.trim() || password !== saved.ugos.password),
-		r2:
-			configuration !== null &&
-			!saving.r2 &&
-			accessKeyId.trim() !== "" &&
-			secretAccessKey.trim() !== "" &&
-			(accessKeyId.trim() !== saved.r2.accessKeyId.trim() || secretAccessKey !== saved.r2.secretAccessKey),
-		ntfy:
-			configuration !== null &&
-			!saving.ntfy &&
-			ntfyToken.trim() !== "" &&
-			ntfyToken.trim() !== saved.ntfy.token.trim(),
 		nowledge:
 			configuration !== null &&
 			!saving.nowledge &&
@@ -196,20 +166,11 @@
 				password = initial.ugos.data.password;
 				saved.ugos = { username, password };
 			}
-			if (initial.r2.status === "ready") {
-				accessKeyId = initial.r2.data.accessKeyId;
-				secretAccessKey = initial.r2.data.secretAccessKey;
-				saved.r2 = { accessKeyId, secretAccessKey };
-			}
 			codexResetsEnabled = initial.codexResets.enabled;
 			saved.codexResets = codexResetsEnabled;
 			if (initial.notionCalendar.status === "ready") {
 				notionViewUrl = initial.notionCalendar.data.viewUrl;
 				saved.notion = notionViewUrl.trim();
-			}
-			if (initial.ntfy.status === "ready") {
-				ntfyToken = initial.ntfy.data.token;
-				saved.ntfy = { ...initial.ntfy.data };
 			}
 			if (initial.nowledge.status === "ready") {
 				nowledgeUrl = initial.nowledge.data.url;
@@ -259,30 +220,6 @@
 		saved.ugos = submitted;
 	}
 
-	async function saveR2(event: SubmitEvent) {
-		event.preventDefault();
-		if (!canSave.r2) return;
-		saving.r2 = true;
-		formErrors.r2 = null;
-		const submitted = { accessKeyId, secretAccessKey };
-		const response = await onsaver2(submitted);
-		saving.r2 = false;
-		if (response.status === "failed") {
-			formErrors.r2 = response.message;
-			return;
-		}
-		saved.r2 = submitted;
-	}
-
-	async function switchAccount(command: "sign_in" | "sign_out") {
-		if (saving.account) return;
-		saving.account = true;
-		formErrors.account = null;
-		const response = await onswitchaccount(command);
-		saving.account = false;
-		if (response.status === "failed") formErrors.account = response.message;
-	}
-
 	async function saveAppLock(event: SubmitEvent) {
 		event.preventDefault();
 		if (!canSave["app-lock"]) return;
@@ -321,24 +258,6 @@
 		notionSaving = false;
 		if (response.status === "failed") notionError = response.message;
 		else saved.notion = submitted;
-	}
-
-	async function saveNtfy(event: SubmitEvent) {
-		event.preventDefault();
-		if (!canSave.ntfy) return;
-		saving.ntfy = true;
-		formErrors.ntfy = null;
-		const submitted = {
-			token: ntfyToken,
-			development: false,
-		};
-		const response = await onsaventfy(submitted);
-		saving.ntfy = false;
-		if (response.status === "failed") {
-			formErrors.ntfy = response.message;
-			return;
-		}
-		saved.ntfy = submitted;
 	}
 
 	async function saveNowledge(event: SubmitEvent) {
@@ -628,27 +547,6 @@
 
 	<Card>
 		<CardHeader class="settings-card-header settings-card-header-status">
-			<span class="settings-icon"><BellRing size={16} /></span>
-			<div><CardTitle class="settings-card-title">Notifications</CardTitle><CardDescription class="settings-card-description">Subscribe to notifications through ntfy.</CardDescription></div>
-			{#if configuration?.ntfyDev}<ConfigurationBadge label="Environment" />{:else if configuration?.ntfy.status === "ready"}<ConfigurationBadge />{/if}
-		</CardHeader>
-		{@render failure(formErrors["ntfy"])}
-		<form onsubmit={saveNtfy}>
-			<CardContent class="settings-card-content">
-				<div class="settings-row">
-					<div><Label for="ntfy-token">Token</Label><p>Use the access token for the Vesper ntfy subscription.</p></div>
-					<div class="secret-field">
-						<Input id="ntfy-token" class="settings-input settings-secret-input" type={ntfyTokenVisible ? "text" : "password"} bind:value={ntfyToken} autocomplete="off" autocapitalize="none" spellcheck="false" required />
-						<Button type="button" class="settings-secret-toggle" variant="ghost" size="icon" onclick={() => (ntfyTokenVisible = !ntfyTokenVisible)} aria-label={ntfyTokenVisible ? "Hide ntfy token" : "Show ntfy token"}>{#if ntfyTokenVisible}<EyeOff size={14} />{:else}<Eye size={14} />{/if}</Button>
-					</div>
-				</div>
-			</CardContent>
-			<CardFooter class="settings-card-footer"><span class="settings-footer-copy">Use a token with permission to read your notifications.</span><Button class="settings-save-button" size="sm" type="submit" disabled={!canSave.ntfy}>{saving.ntfy ? "Saving…" : "Save"}</Button></CardFooter>
-		</form>
-	</Card>
-
-	<Card>
-		<CardHeader class="settings-card-header settings-card-header-status">
 			<span class="settings-icon"><Lock size={16} /></span>
 			<div><CardTitle class="settings-card-title">App Lock</CardTitle><CardDescription class="settings-card-description">Hide Vesper behind a local password while it remains open.</CardDescription></div>
 			{#if configuration?.appLockDev}<ConfigurationBadge label="Environment" />{:else if configuration?.appLock.status === "ready"}<ConfigurationBadge />{/if}
@@ -701,28 +599,6 @@
 		</form>
 	</Card>
 
-	<Card>
-		<CardHeader class="settings-card-header settings-card-header-status">
-			<span class="settings-icon"><KeyRound size={16} /></span>
-			<div><CardTitle class="settings-card-title">Vesper</CardTitle><CardDescription class="settings-card-description">One Vesper sign-in opens Memos, Moment and Knowledge.</CardDescription></div>
-			{#if configuration?.account.status === "ready"}<ConfigurationBadge />{/if}
-		</CardHeader>
-		{@render failure(formErrors.account)}
-		<CardContent class="settings-card-content">
-			<div class="settings-row">
-				{#if configuration?.account.status === "ready"}
-					<div class="account">
-						{#if configuration.account.data.picture}<img class="account-picture" src={configuration.account.data.picture} alt="" />{/if}
-						<div><Label>{configuration.account.data.name}</Label><p>{configuration.account.data.email}</p></div>
-					</div>
-					<Button class="settings-save-button" size="sm" type="button" variant="outline" disabled={saving.account} onclick={() => switchAccount("sign_out")}>{saving.account ? "Signing out…" : "Sign out"}</Button>
-				{:else}
-					<div><Label>Browser sign-in</Label><p>Vesper opens noted-this.date in your browser and returns here.</p></div>
-					<Button class="settings-save-button" size="sm" type="button" disabled={saving.account || configuration === null} onclick={() => switchAccount("sign_in")}>{saving.account ? "Waiting for Vesper…" : "Sign in"}</Button>
-				{/if}
-			</div>
-		</CardContent>
-	</Card>
 
 
 
@@ -748,31 +624,6 @@
 				</div>
 			</CardContent>
 			<CardFooter class="settings-card-footer"><span class="settings-footer-copy">Vesper connects to this server directly.</span><Button class="settings-save-button" size="sm" type="submit" disabled={!canSave.nowledge}>{saving.nowledge ? "Saving…" : "Save"}</Button></CardFooter>
-		</form>
-	</Card>
-
-	<Card>
-		<CardHeader class="settings-card-header settings-card-header-status">
-			<span class="settings-icon"><Cloud size={16} /></span>
-			<div><CardTitle class="settings-card-title">Cloudflare R2</CardTitle><CardDescription class="settings-card-description">Optional for Moment: reads and uploads photos directly. Required to publish content in cherry-studio.</CardDescription></div>
-			{#if configuration !== null && configuration.r2.status === "ready"}<ConfigurationBadge />{/if}
-		</CardHeader>
-		{@render failure(formErrors["r2"])}
-		<form onsubmit={saveR2}>
-			<CardContent class="settings-card-content">
-			<div class="settings-row">
-				<div><Label for="r2-access-key">Access Key ID</Label><p>S3-compatible access key for this bucket.</p></div>
-				<Input id="r2-access-key" class="settings-input" bind:value={accessKeyId} autocomplete="off" spellcheck="false" required />
-			</div>
-			<div class="settings-row">
-				<div><Label for="r2-secret-key">Secret Access Key</Label><p>The secret paired with your access key.</p></div>
-				<div class="secret-field">
-					<Input id="r2-secret-key" class="settings-input settings-secret-input" type={secretVisible ? "text" : "password"} bind:value={secretAccessKey} autocomplete="off" autocapitalize="none" spellcheck="false" required />
-					<Button type="button" class="settings-secret-toggle" variant="ghost" size="icon" onclick={() => (secretVisible = !secretVisible)} aria-label={secretVisible ? "Hide secret key" : "Show secret key"}>{#if secretVisible}<EyeOff size={14} />{:else}<Eye size={14} />{/if}</Button>
-				</div>
-			</div>
-			</CardContent>
-			<CardFooter class="settings-card-footer"><span class="settings-footer-copy">Changes apply immediately.</span><Button class="settings-save-button" size="sm" type="submit" disabled={!canSave.r2}>{#if saving.r2}Saving…{:else}Save{/if}</Button></CardFooter>
 		</form>
 	</Card>
 	</section>
@@ -803,8 +654,6 @@
 	.settings-group[hidden] { display: none; }
 	.settings-content :global([data-slot="card"]) { overflow: hidden; box-shadow: none; }
 	.secret-field { position: relative; min-width: 0; }
-	.account { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
-	.account-picture { width: 2.25rem; height: 2.25rem; flex: none; border-radius: 9999px; object-fit: cover; }
 	.settings-footer-copy { min-width: 0; overflow-wrap: anywhere; color: var(--color-muted-foreground); font-size: 0.68rem; line-height: 1.5; }
 	form { border-top: 1px solid var(--color-border); }
 	.lock-actions { display: flex; align-items: center; gap: 0.4rem; }

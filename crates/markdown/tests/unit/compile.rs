@@ -1,44 +1,14 @@
-use crate::{knowledge, publication};
+use crate::knowledge;
 use md_dialect::{EmbedError, embed};
 use std::collections::HashMap;
-
-fn render_without_data(source: &str) -> Result<String, publication::Error> {
-    publication::render_with(source, &embed::Data::default())
-}
 
 fn compile_without_data(source: &str) -> Result<knowledge::Compiled, EmbedError> {
     knowledge::compile_with(source, &embed::Data::default())
 }
 
 #[test]
-fn highlights_code() {
-    let html = render_without_data("```rust\nfn main() {}\n```").unwrap();
-
-    assert!(html.contains("class=\"highlighted-code\""));
-    assert!(html.contains("<pre style=\"background-color:"));
-    assert!(html.contains("<span style=\"color:"));
-    assert!(html.contains("main"));
-    assert!(!html.contains("language-rust"));
-}
-
-#[test]
-fn renders_mermaid() {
-    let html = render_without_data("```mermaid\nflowchart LR\n  A[Start] --> B[End]\n```").unwrap();
-
-    assert!(html.contains("<figure class=\"mermaid-diagram\"><svg"));
-    assert!(html.contains("Start"));
-    assert!(html.contains("End"));
-    assert!(!html.contains("language-mermaid"));
-}
-
-#[test]
-fn rejects_bad_mermaid() {
-    assert!(render_without_data("```mermaid\nnot-a-diagram\n```").is_err());
-}
-
-#[test]
 fn svg_canvases() {
-    let html = render_without_data(
+    let html = compile_without_data(
         r#"```embed:architecture
 align: left
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img">
@@ -59,7 +29,8 @@ align: right
 </svg>
 ```"#,
     )
-    .unwrap();
+    .unwrap()
+    .html;
 
     assert_eq!(html.matches("data-md-dialect=\"embeds\"").count(), 1);
     assert!(html.contains("svg-canvas-architecture content-embed-left"));
@@ -71,10 +42,11 @@ align: right
 
 #[test]
 fn structured_diagrams() {
-    let html = render_without_data(
+    let html = compile_without_data(
         "```embed:architecture\nalign: wide\nflowchart LR\nClient --> API\nAPI --> Database\n```\n\n```embed:storyboard\ntitle: 发布流程\nstep: 编写 | 完成 Markdown 内容\nstep: 构建 | 编译并验证内容\nstep: 发布 | 上传生成的产物\n```",
     )
-    .unwrap();
+    .unwrap()
+    .html;
 
     assert!(html.contains("svg-canvas-architecture content-embed-wide"));
     assert!(html.contains("class=\"node c-teal\""));
@@ -88,22 +60,22 @@ fn structured_diagrams() {
 
 #[test]
 fn rejects_invalid_content_embeds() {
-    let unknown = render_without_data("```embed:video\nurl: https://example.com\n```")
+    let unknown = compile_without_data("```embed:video\nurl: https://example.com\n```")
         .unwrap_err()
         .to_string();
     assert!(unknown.contains("unsupported embed kind `embed:video`"));
 
-    let bad_repository = render_without_data("```embed:github\nrepo: missing-owner\n```")
+    let bad_repository = compile_without_data("```embed:github\nrepo: missing-owner\n```")
         .unwrap_err()
         .to_string();
     assert!(bad_repository.contains("expected `owner/name`"));
 
-    let bad_field = render_without_data("```embed:stock\nticker: AAPL\n```")
+    let bad_field = compile_without_data("```embed:stock\nticker: AAPL\n```")
         .unwrap_err()
         .to_string();
     assert!(bad_field.contains("does not support field `ticker`"));
 
-    let bad_alignment = render_without_data(
+    let bad_alignment = compile_without_data(
         "```embed:architecture\nalign: center\n<svg xmlns=\"http://www.w3.org/2000/svg\"><title>A</title><desc>B</desc></svg>\n```",
     )
     .unwrap_err()
@@ -248,15 +220,13 @@ fn blocks_unsafe_destinations() {
 #[tokio::test]
 async fn media() {
     let source = "# Listen\n\nBefore.\n\n```embed:media\ntype: audio\nsrc: https://example.com/clip.mp3\ncaption: A short recording\n```\n\nAfter.";
-    let publication = publication::render(source).await.unwrap();
     let knowledge = knowledge::compile(source, HashMap::new()).await.unwrap();
-    for html in [&publication, &knowledge.html] {
-        assert!(html.contains("<audio controls preload=\"none\""));
-        assert!(html.contains("<figcaption>A short recording</figcaption>"));
-        assert!(html.contains("<p>Before.</p>"));
-        assert!(html.contains("<p>After.</p>"));
-        assert_eq!(html.matches("<style data-md-dialect").count(), 1);
-    }
+    let html = &knowledge.html;
+    assert!(html.contains("<audio controls preload=\"none\""));
+    assert!(html.contains("<figcaption>A short recording</figcaption>"));
+    assert!(html.contains("<p>Before.</p>"));
+    assert!(html.contains("<p>After.</p>"));
+    assert_eq!(html.matches("<style data-md-dialect").count(), 1);
     assert_eq!(knowledge.toc.len(), 1);
     assert!(!knowledge.excerpt.contains("type: audio"));
     assert!(
@@ -287,15 +257,13 @@ async fn front_matter_embeds() {
 #[tokio::test]
 async fn unindexed_shortcuts() {
     let source = "# Reading\n\n- First\n\n  ```embed:article\n  id: first-article\n  title: First article\n  ```\n\n- Second\n\n  ```embed:article\n  url: https://example.com/story\n  title: External story\n  description: External summary\n  ```";
-    let publication = publication::render(source).await.unwrap();
     let knowledge = knowledge::compile(source, HashMap::new()).await.unwrap();
-    for html in [&publication, &knowledge.html] {
-        assert!(!html.contains("href="));
-        assert_eq!(html.matches("aria-disabled=\"true\"").count(), 2);
-        assert_eq!(html.matches("<style data-md-dialect").count(), 1);
-        assert_eq!(html.matches("<li>").count(), 2);
-        assert!(!html.contains("language-embed:article"));
-    }
+    let html = &knowledge.html;
+    assert!(!html.contains("href="));
+    assert_eq!(html.matches("aria-disabled=\"true\"").count(), 2);
+    assert_eq!(html.matches("<style data-md-dialect").count(), 1);
+    assert_eq!(html.matches("<li>").count(), 2);
+    assert!(!html.contains("language-embed:article"));
     assert!(
         knowledge::fallback(source)
             .html
@@ -394,16 +362,15 @@ async fn fence_newlines() {
     let source = format!(
         "~~~embed:quote\nauthor: A & B\nurl: https://example.com\n---\nFirst\n\n<script>plain text</script>\n\n~~~\n\n~~~embed:diff\n{patch}\n~~~"
     );
-    let knowledge = knowledge::compile(&source, HashMap::new()).await.unwrap();
-    let publication = publication::render(&source).await.unwrap();
-    for html in [&knowledge.html, &publication] {
-        assert!(html.contains("First\n\n&lt;script&gt;plain text&lt;/script&gt;\n</p>"));
-        assert!(html.contains("class=\"diff-remove\">-&lt;old&gt;\n</span>"));
-        assert!(html.contains("class=\"diff-add\">+&lt;new&gt;\n</span>"));
-    }
+    let html = knowledge::compile(&source, HashMap::new())
+        .await
+        .unwrap()
+        .html;
+    assert!(html.contains("First\n\n&lt;script&gt;plain text&lt;/script&gt;\n</p>"));
+    assert!(html.contains("class=\"diff-remove\">-&lt;old&gt;\n</span>"));
+    assert!(html.contains("class=\"diff-add\">+&lt;new&gt;\n</span>"));
     let invalid = format!("~~~embed:diff\n{patch}\n\n~~~");
     assert!(knowledge::compile(&invalid, HashMap::new()).await.is_err());
-    assert!(publication::render(&invalid).await.is_err());
 }
 
 #[tokio::test]
@@ -413,8 +380,6 @@ async fn bare_embed_examples() {
     assert!(knowledge.html.contains("language-markdown"));
     assert!(knowledge.html.contains("```embed:github"));
     assert!(knowledge.html.contains("Live <mark>text</mark>."));
-    let publication = publication::render(source).await.unwrap();
-    assert!(publication.contains("Live <mark>text</mark>."));
     assert!(
         md_dialect::article_urls(
             "```\n```embed:article\nhttps://knowledge.you-find.me/articles/example\n```\n```"
@@ -434,6 +399,4 @@ fn image_shortcodes() {
         assert!(article.html.contains("<code>:suzume5_01:</code>"));
         assert_eq!(article.toc[0].text, "Heading :suzume5_01:");
     }
-    let publication = render_without_data(":suzume5_01: `:suzume5_01:`").unwrap();
-    assert_eq!(publication.matches("class=\"markdown-emoji\"").count(), 1);
 }

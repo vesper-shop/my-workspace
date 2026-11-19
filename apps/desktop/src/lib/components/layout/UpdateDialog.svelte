@@ -80,10 +80,10 @@
 
 	function trapFocus(event: KeyboardEvent) {
 		if (event.key !== "Tab" || updateDialog === null) return;
-		const controls = updateDialog.querySelectorAll<HTMLElement>("button:not(:disabled)");
-		if (controls.length === 0) return;
+		const controls = updateDialog.querySelectorAll("button:not(:disabled)");
 		const first = controls.item(0);
 		const last = controls.item(controls.length - 1);
+		if (!(first instanceof HTMLElement) || !(last instanceof HTMLElement)) return;
 		if (document.activeElement === updateDialog) {
 			event.preventDefault();
 			(event.shiftKey ? last : first).focus();

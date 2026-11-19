@@ -11,11 +11,9 @@ link-preview.workspace = true
 linkify.workspace = true
 market-data.workspace = true
 md-dialect.workspace = true
-mermaid-svg.workspace = true
 pulldown-cmark.workspace = true
 regex.workspace = true
 serde.workspace = true
-syntect.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

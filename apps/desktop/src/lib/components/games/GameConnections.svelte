@@ -19,7 +19,7 @@
 	let progress = $state<GameLoginProgress>("waiting");
 	let creating = $state(false);
 	let generation = 0;
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timer: number | null = null;
 	let dialog = $state<HTMLDialogElement | null>(null);
 	let apiKey = $state("");
 	let steamId = $state("");
@@ -76,7 +76,7 @@
 	}
 	function closeLogin() {
 		generation += 1;
-		if (timer !== null) { clearTimeout(timer); timer = null; }
+		if (timer !== null) { window.clearTimeout(timer); timer = null; }
 		if (provider !== null && qr !== null) void invoke("cancel_game_login", { provider, id: qr.id });
 		dialog?.close(); provider = null; qr = null; creating = false;
 	}
@@ -109,7 +109,7 @@
 			return;
 		}
 		if (progress === "expired") return;
-		timer = setTimeout(() => { timer = null; void poll(selected, code, current); }, 2000);
+		timer = window.setTimeout(() => { timer = null; void poll(selected, code, current); }, 2000);
 	}
 	async function saveSteam() {
 		if (steamLoading || steamSaving || !steamChanged || !apiKey.trim() || !/^\d{17}$/.test(steamId.trim())) return;

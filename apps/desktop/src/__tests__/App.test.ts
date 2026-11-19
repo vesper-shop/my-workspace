@@ -51,10 +51,7 @@ function deferred<T>() {
 
 const configuration: ConfigurationStatus = {
 	ugos: { status: "missing" },
-	r2: { status: "missing" },
 	account: { status: "ready", data: { email: "owner@example.com", name: "Owner", picture: null } },
-	ntfy: { status: "ready", data: { token: "test-ntfy", development: false } },
-	ntfyDev: false,
 	notionCalendar: { status: "missing" },
 	codexResets: { enabled: false },
 	appLock: { status: "missing" },
@@ -101,7 +98,6 @@ function setupCommands() {
 			return { status: "ready", data: { capturedAt: null, geo: null } };
 		if (command === "read_configuration") return { status: "ready", data: configuration };
 		if (command === "check_for_update") return { status: "ready", data: null };
-		if (command === "read_notifications") return { status: "ready", data: [] };
 		if (command === "read_channel") return { status: "ready", data: memos };
 		return { status: "failed", message: "Not configured in this test" };
 	});
@@ -125,7 +121,7 @@ it("collapses the sidebar and restores its saved width", async () => {
 	expect(target.querySelector("aside")?.classList.contains("compact")).toBe(true);
 	expect(saved.get("vesper.sidebar.width")).toBe("64");
 	expect(button(target, "Dashboard", "nav button").getAttribute("aria-label")).toBe("Dashboard");
-	expect(target.querySelector(".user-profile img")).not.toBeNull();
+	expect(target.querySelector(".profile img")).not.toBeNull();
 	await unmount(view);
 	views.push(mount(App, { target }));
 	await tick();
@@ -136,7 +132,7 @@ it("collapses the sidebar and restores its saved width", async () => {
 	await tick();
 	expect(target.querySelector("aside")?.classList.contains("compact")).toBe(false);
 	expect(saved.get("vesper.sidebar.width")).toBe("360");
-	expect(target.querySelector(".user-identity small")?.textContent).toBe("owner@example.com");
+	expect(target.querySelector(".identity small")?.textContent).toBe("owner@example.com");
 });
 
 it("renders ready tags before initialization and the other source finish; failed tags can retry", async () => {
@@ -199,12 +195,10 @@ it("preserves a completed write after navigation against older tags and startup 
 		html: "<p>Saved across navigation</p>",
 		tags: ["new"],
 		createdAt: "2026-09-06T00:00:00Z",
-		updatedAt: "2026-09-06T00:00:00Z",
 		visibility: "private",
 		pinned: false,
 		favorite: false,
 		archived: false,
-		metadataComplete: true,
 	};
 	let reads = 0;
 	invoke.mockImplementation((command: string) => {
@@ -312,9 +306,12 @@ it.each([false, true])(
 		await vi.waitFor(() => expect(button(target, "Publish").disabled).toBe(false));
 		button(target, "Publish").click();
 		await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-		button(target, changeCredentials ? "Settings" : "Dashboard", "nav button").click();
+		button(target, "Dashboard", "nav button").click();
 		await tick();
 		if (changeCredentials) {
+			const profile = target.querySelector(".profile");
+			if (!(profile instanceof HTMLButtonElement)) throw new Error("Profile missing");
+			profile.click();
 			await vi.waitFor(() => expect(button(target, "Sign out")).toBeTruthy());
 			const previousReads = tagReads;
 			button(target, "Sign out").click();
@@ -383,26 +380,6 @@ it("does not reactivate Dashboard when its listener resolves after navigation", 
 	expect(invoke).not.toHaveBeenCalledWith("refresh_dashboard", expect.anything());
 });
 
-it("subscribes to ntfy only in Inbox and stops on leaving it", async () => {
-	setupCommands();
-	const target = document.createElement("div");
-	document.body.append(target);
-	views.push(mount(App, { target }));
-	await vi.waitFor(() => expect(button(target, "Memos", "nav button")).toBeTruthy());
-	await tick();
-	expect(invoke).not.toHaveBeenCalledWith("set_notifications_active", { active: true });
-	const inbox = target.querySelector<HTMLButtonElement>('[aria-label="Open inbox"]');
-	if (!inbox) throw new Error("Inbox action missing");
-	inbox.click();
-	await vi.waitFor(() =>
-		expect(invoke).toHaveBeenCalledWith("set_notifications_active", { active: true }),
-	);
-	button(target, "Memos", "nav button").click();
-	await vi.waitFor(() =>
-		expect(invoke).toHaveBeenCalledWith("set_notifications_active", { active: false }),
-	);
-});
-
 it("does not reactivate Dashboard when its listener resolves after unmount", async () => {
 	setupCommands();
 	const registration = deferred<() => void>();
@@ -468,15 +445,63 @@ it("shows only configured destinations after configuration loads", async () => {
 		data: {
 			...configuration,
 			account: { status: "missing" },
-			ntfy: { status: "missing" },
 			qqMusic: { status: "ready", data: "Connected" },
 		},
 	});
 	await vi.waitFor(() =>
 		expect(labels()).toEqual(["Dashboard", "Chat", "Newspaper", "Music", "Settings"]),
 	);
-	expect(target.querySelector('[aria-label="Open inbox"]')).toBeNull();
 	expect(target.querySelector("aside")?.textContent).not.toContain("Connections");
+});
+
+it("signs in with Vesper from the sidebar profile and opens the content views", async () => {
+	setupCommands();
+	const normal = invoke.getMockImplementation();
+	if (!normal) throw new Error("Missing command mock");
+	let signedIn = false;
+	invoke.mockImplementation((command: string) => {
+		if (command === "read_configuration")
+			return Promise.resolve({
+				status: "ready",
+				data: signedIn ? configuration : { ...configuration, account: { status: "missing" } },
+			});
+		if (command === "sign_in") {
+			signedIn = true;
+			return Promise.resolve({ status: "ready", data: "owner@example.com" });
+		}
+		if (command === "initialize_views") {
+			const empty: CommandResponse<ChannelView> = {
+				status: "failed",
+				message: "Not loaded in this test",
+			};
+			return Promise.resolve({ memos: empty, moment: empty, knowledge: empty });
+		}
+		return normal(command);
+	});
+	const target = document.createElement("div");
+	document.body.append(target);
+	views.push(mount(App, { target }));
+	const labels = () =>
+		Array.from(target.querySelectorAll('nav[aria-label="Consumer views"] button'), (item) =>
+			item.textContent?.trim(),
+		);
+	const profile = target.querySelector(".profile");
+	if (!(profile instanceof HTMLButtonElement)) throw new Error("Profile missing");
+	await vi.waitFor(() => expect(profile.getAttribute("aria-label")).toBe("Sign in with Vesper"));
+	expect(labels()).not.toContain("Memos");
+	profile.click();
+	await tick();
+	await vi.waitFor(() => expect(button(target, "Sign in with Vesper").disabled).toBe(false));
+	button(target, "Sign in with Vesper").click();
+	await vi.waitFor(() =>
+		expect(profile.getAttribute("aria-label")).toBe("Owner, owner@example.com"),
+	);
+	expect(target.querySelector('[role="dialog"][aria-label="Vesper account"]')).toBeNull();
+	expect(labels()).toEqual(expect.arrayContaining(["Memos", "Moment", "Knowledge"]));
+	expect(invoke.mock.calls.filter(([command]) => command === "initialize_views")).toHaveLength(2);
+	button(target, "Settings", "nav button").click();
+	await tick();
+	expect(target.querySelector("#settings-services")?.textContent).not.toContain("Sign in");
 });
 
 it("loads the AIHOT daily when Newspaper opens", async () => {
@@ -634,10 +659,10 @@ it("places Chat below Dashboard and discards its conversation when leaving", asy
 	);
 	target.querySelector<HTMLButtonElement>('[aria-label="Connect Pi"]')?.click();
 	await vi.waitFor(() => expect(target.textContent).toContain("temporary reply"));
-	const profilePhoto = target.querySelector<HTMLImageElement>(".user-profile img");
-	const messagePhoto = target.querySelector<HTMLImageElement>('section[aria-label="Chat"] .avatar');
-	expect(messagePhoto?.src).toBe(profilePhoto?.src);
-	expect(messagePhoto?.src).toContain("pleasure1234-avatar.png");
+	const profilePhoto = target.querySelector(".profile img");
+	const messagePhoto = target.querySelector('section[aria-label="Chat"] .avatar');
+	expect(messagePhoto?.getAttribute("src")).toBe(profilePhoto?.getAttribute("src"));
+	expect(messagePhoto?.getAttribute("src")).toContain("pleasure1234-avatar.webp");
 	const input = target.querySelector<HTMLTextAreaElement>('[aria-label="Message Pi"]');
 	if (input === null) throw new Error("Missing composer");
 	input.value = "temporary draft";

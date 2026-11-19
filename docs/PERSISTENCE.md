@@ -7,7 +7,7 @@ and publication artifacts are transport formats, not local database substitutes.
 
 ## Location and schema
 
-Desktop and CLI both call `database::path()`: `dirs::data_local_dir()` plus `database::APP_ID`
+The desktop calls `database::path()`: `dirs::data_local_dir()` plus `database::APP_ID`
 (`me.you-find.vesper`, matching the Tauri identifier). On macOS this is
 `~/Library/Application Support/me.you-find.vesper/`. Both applications use the same
 `vesper.sqlite3`; Windows local data must not be confused with roaming application data.
@@ -33,7 +33,6 @@ file stores nor falls back to them; normal reads and writes use the shared datab
 | `todo_sources`                                | Todo              | Public calendar source enable preferences keyed by source name      |
 | `check_ins`                                   | Todo              | Habit completions keyed by stable habit ID and selected date        |
 | `ledger_entries`                              | Ledger            | Dated GBP expenses in integer pence with category and creation time |
-| `notifications`, `notification_cursor`        | Inbox             | Pending messages and SSE replay cursor                              |
 | `game_accounts`, `game_pulls`, `game_reports` | Games             | Accounts, deduplicated history and official reports                 |
 | `game_diagnostic`                             | Games             | Latest bounded verification metadata, excluding secrets             |
 | `telegram_session`                            | Social            | MTProto session state                                               |
@@ -55,7 +54,6 @@ Ledger validates decimal amounts and categories, then commits each expense mutat
 use a consistent transaction; failed validation or aggregation leaves the stored entries intact.
 Removing a widget preserves its feature records.
 
-Inbox commits its messages and replay cursor together before publishing the new in-memory state.
 Game imports validate provider records and reject conflicts with archived identity before committing
 an entire batch. Existing records survive a failed transaction.
 
@@ -82,11 +80,9 @@ and consolidates remote projections without moving completed history.
 Repeated or concurrent runs cannot create duplicate follow-ups. Remote reconciliation preserves
 completion, ordering, and carry-forward preferences while replacing source-owned content. Failed
 reads do not replace a provider's saved projection. Configuration changes and reconciliation retain
-a feature lock through commit across Desktop and CLI.
+a feature lock through commit.
 
-ICS source files remain in `ics/` and are read on synchronization. Imports validate every file
-before staging and atomically replacing each one; a later installation failure can leave earlier
-files installed and is reported explicitly. SQLite occurrence keys retain local deletion history.
+ICS source files are placed in `ics/` and read on synchronization. SQLite occurrence keys retain local deletion history.
 Existing ICS occurrence keys skip source replacement, retaining local title/description edits and
 original calendar metadata.
 
@@ -121,9 +117,9 @@ Settings prefill response is the narrow exception for fields the user edits loca
 
 ## Backup and verification
 
-Close desktop and CLI writers before copying the database. A database backup does not include OS
+Quit Vesper before copying the database. A database backup does not include OS
 credentials, the `ics/` directory or WebView preferences. Back up ICS files separately. App Lock controls access to the interface; it does not encrypt
 the database. Preserve corrupt data for inspection instead of silently replacing it with defaults.
 
 Functional tests cover concurrent Todo writes, transaction rollback, layout consistency, duplicate
-calendar imports, notification persistence, credential isolation, and game-history conflicts.
+calendar sources, credential isolation, and game-history conflicts.

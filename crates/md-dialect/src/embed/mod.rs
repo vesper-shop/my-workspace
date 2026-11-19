@@ -316,26 +316,6 @@ fn reject_unknown(
     Ok(())
 }
 
-/// Collect document-relative media assets for the publication builder to validate and copy.
-/// Remote sources are rendered directly and never downloaded during compilation.
-pub fn collect_media_paths(source: &str) -> Result<Vec<String>, EmbedError> {
-    let mut paths = Vec::new();
-    for (language, source) in parse_fences(source) {
-        if language != MEDIA {
-            continue;
-        }
-        let item = media::parse(fields(&language, &source)?)?;
-        for source in [Some(item.src), item.poster].into_iter().flatten() {
-            if source.local {
-                paths.push(source.url);
-            }
-        }
-    }
-    paths.sort();
-    paths.dedup();
-    Ok(paths)
-}
-
 fn parse_fences(source: &str) -> Vec<(String, String)> {
     let source = crate::normalize_embed_examples(source);
     let mut blocks = Vec::new();

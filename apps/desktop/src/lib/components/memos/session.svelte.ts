@@ -86,7 +86,6 @@ export function createMemosSession(context: {
 	let memoFilterRequest = 0;
 	let memoSearch = "";
 	let memoTags: string[] = [];
-	let memoSortByUpdated = false;
 	let filtersChanged = false;
 	async function load(cursor: string | null, replace: boolean, showPaginationStatus = false) {
 		if (loading) return;
@@ -99,7 +98,6 @@ export function createMemosSession(context: {
 				cursor,
 				search: memoSearch === "" ? null : memoSearch,
 				tags: memoTags,
-				sortByUpdated: memoSortByUpdated,
 				archivedOnly: memoDisplay === "archived",
 				favoritesOnly: memoDisplay === "favorites",
 			},
@@ -196,7 +194,6 @@ export function createMemosSession(context: {
 	async function filterMemos(
 		search: string,
 		tags: string[],
-		sortByUpdated: boolean,
 		display: MemoDisplay,
 	): Promise<string | null> {
 		const version = ++memoFilterRequest;
@@ -205,7 +202,6 @@ export function createMemosSession(context: {
 		memoDisplay = display;
 		memoSearch = search;
 		memoTags = tags;
-		memoSortByUpdated = sortByUpdated;
 		loading = true;
 		loadingMore = false;
 		const response = await invoke<CommandResponse<ChannelView>>("read_channel", {
@@ -214,7 +210,6 @@ export function createMemosSession(context: {
 				cursor: null,
 				search: search === "" ? null : search,
 				tags,
-				sortByUpdated,
 				archivedOnly: display === "archived",
 				favoritesOnly: display === "favorites",
 			},
@@ -262,13 +257,7 @@ export function createMemosSession(context: {
 		void tags.refresh(true);
 		// Filter membership and ordering are owned by the API. Never combine a
 		// cursor from the old filter with newly selected query parameters.
-		if (
-			filtersChanged ||
-			memoSearch !== "" ||
-			memoTags.length > 0 ||
-			memoSortByUpdated ||
-			memoDisplay !== "active"
-		) {
+		if (filtersChanged || memoSearch !== "" || memoTags.length > 0 || memoDisplay !== "active") {
 			filtersChanged = true;
 			if (context.active) void load(null, true);
 		}
@@ -397,7 +386,7 @@ export function createMemosSession(context: {
 			return request;
 		},
 		get filters() {
-			return { search: memoSearch, tags: memoTags, sortByUpdated: memoSortByUpdated };
+			return { search: memoSearch, tags: memoTags };
 		},
 		enter,
 		leave,

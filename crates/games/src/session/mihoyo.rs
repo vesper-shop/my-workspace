@@ -1,6 +1,6 @@
 use super::{Provider, Session};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs::File};
+use std::collections::BTreeMap;
 use vault::Stored;
 
 #[derive(Default, Deserialize, Serialize)]
@@ -81,18 +81,7 @@ impl Accounts {
     }
 }
 
-fn lock() -> Result<File, vault::Error> {
-    let directory = database::directory()?;
-    std::fs::create_dir_all(&directory)?;
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(directory.join("games-mihoyo.lock"))?;
-    file.lock()?;
-    Ok(file)
-}
+static UPDATES: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn load() -> Result<Accounts, vault::Error> {
     let accounts = match vault::read_json(Provider::Mihoyo.key())? {
@@ -104,14 +93,15 @@ fn load() -> Result<Accounts, vault::Error> {
 }
 
 pub fn read() -> Result<Accounts, vault::Error> {
-    let _lock = lock()?;
     load()
 }
 
 pub fn update(
     change: impl FnOnce(&mut Accounts) -> Result<(), vault::Error>,
 ) -> Result<(), vault::Error> {
-    let _lock = lock()?;
+    let _guard = UPDATES
+        .lock()
+        .map_err(|_| vault::Error::StoreSynchronization)?;
     let mut accounts = load()?;
     change(&mut accounts)?;
     accounts.validate()?;

@@ -7,9 +7,7 @@ import type {
 	CodexResets,
 	ConfigurationStatus,
 	NowledgeCredentials,
-	NtfyConfig,
 	NotionCalendar,
-	R2Configuration,
 	UgosConfiguration,
 } from "@/lib/contracts/settings";
 import SettingsView from "../SettingsView.svelte";
@@ -27,10 +25,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const initial: ConfigurationStatus = {
 	ugos: { status: "ready", data: { username: "user", password: "password" } },
-	r2: { status: "ready", data: { accessKeyId: "access", secretAccessKey: "secret" } },
 	account: { status: "ready", data: { email: "owner@example.com", name: "Owner", picture: null } },
-	ntfy: { status: "ready", data: { token: "ntfy-token", development: false } },
-	ntfyDev: false,
 	notionCalendar: { status: "missing" },
 	codexResets: { enabled: false },
 	appLock: { status: "ready", data: "lock-password" },
@@ -57,14 +52,7 @@ async function setup(initialConfiguration: ConfigurationStatus = initial) {
 	const save = vi
 		.fn<
 			(
-				input:
-					| NowledgeCredentials
-					| NtfyConfig
-					| NotionCalendar
-					| CodexResets
-					| R2Configuration
-					| UgosConfiguration
-					| string,
+				input: NowledgeCredentials | NotionCalendar | CodexResets | UgosConfiguration | string,
 			) => Promise<CommandResponse<string>>
 		>()
 		.mockResolvedValue({ status: "ready", data: "Saved" });
@@ -78,11 +66,8 @@ async function setup(initialConfiguration: ConfigurationStatus = initial) {
 				},
 				error: null,
 				onsaveugos: save,
-				onsaver2: save,
-				onswitchaccount: vi.fn().mockResolvedValue({ status: "ready", data: "account" }),
 				onsavenotion: save,
 				onsavecodexresets: save,
-				onsaventfy: save,
 				onsavenowledge: save,
 				onsaveapplock: save,
 				onremoveapplock: vi.fn().mockResolvedValue({ status: "ready", data: "Removed" }),
@@ -174,9 +159,6 @@ it("preserves unsaved fields when switching settings categories", async () => {
 it.each([
 	["ugos-username", "user"],
 	["ugos-password", "password"],
-	["r2-access-key", "access"],
-	["r2-secret-key", "secret"],
-	["ntfy-token", "ntfy-token"],
 	["app-lock-password", "lock-password"],
 ])("enables %s only for complete, changed input and resets after saving", async (id, original) => {
 	const form = await setup();
